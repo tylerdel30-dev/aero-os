@@ -1,22 +1,20 @@
-# Aero OS first session — ensure desktop stack exists, then start shell
+# Aero OS first session — lite desktop by default (no Swift compile required)
 
-# Offline/network package + compile if desktop binaries missing
-if [ ! -x /usr/local/bin/aero-shell ]; then
+# Packages + optional GitHub binaries only (never block the session on compile)
+if [ ! -x /usr/local/bin/aero-shell ] && [ ! -x /usr/local/bin/aero-shell-lite ]; then
     /usr/local/sbin/aero-bootstrap / >/tmp/aero-bootstrap.log 2>&1 || true
 fi
-if [ ! -x /usr/local/bin/aero-shell ] && command -v swiftc >/dev/null 2>&1; then
-    /usr/local/sbin/aero-build-desktop >/tmp/aero-build.log 2>&1 || true
-fi
 
-# Desktop shell: wallpaper, top bar, dock, start menu, notifications
+# Wallpaper + Start menu helpers
 if [ -x /usr/local/bin/aero-shell ]; then
     /usr/local/bin/aero-shell &
-else
-    # Temporary foot so the session is usable while compile finishes
-    command -v foot >/dev/null 2>&1 && foot -e sh -c 'echo Aero shell not built yet; echo Run: aero-bootstrap; echo Then: aero-build-desktop; exec sh' &
+elif [ -x /usr/local/bin/aero-shell-lite ]; then
+    /usr/local/bin/aero-shell-lite &
 fi
 
-# One-time first-boot experience
+# First-boot welcome (lite or full)
 if [ -x /usr/local/bin/aero-firstboot ]; then
     /usr/local/bin/aero-firstboot &
+elif [ -x /usr/local/bin/aero-firstboot-lite ]; then
+    /usr/local/bin/aero-firstboot-lite &
 fi

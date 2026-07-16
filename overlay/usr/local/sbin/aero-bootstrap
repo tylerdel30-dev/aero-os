@@ -1,6 +1,8 @@
 #!/bin/sh
 #
-# aero-bootstrap — turnkey Aero desktop (offline pkgs + GitHub binaries + compile)
+# aero-bootstrap — turnkey Aero desktop
+# Default path: lite shell scripts (no Swift compile).
+# Optional: fetch GitHub Swift ELFs if present; compile only if AERO_COMPILE=1.
 #
 set -eu
 
@@ -14,7 +16,6 @@ FULL_PKGS_ZIP="AeroOS-1.0.1-offline-packages-full.zip"
 
 echo "Aero OS bootstrap — target: ${ROOT}"
 
-# Copy Aero layer from live media into mounted root when ROOT != /
 if [ "${ROOT}" != "/" ] && [ -d /usr/local/share/aero ]; then
     echo "==> Syncing Aero files onto ${ROOT}"
     mkdir -p "${ROOT}/usr/local" "${ROOT}/etc"
@@ -27,15 +28,43 @@ if [ "${ROOT}" != "/" ] && [ -d /usr/local/share/aero ]; then
     cp -a /etc/xdg "${ROOT}/etc/" 2>/dev/null || true
 fi
 
-# Prefer prebuilt desktop binaries from GitHub release (no compile needed)
+install_lite_desktop() {
+    target_bin="${ROOT}/usr/local/bin"
+    mkdir -p "${target_bin}"
+    for pair in \
+        "aero-shell-lite:aero-shell" \
+        "aero-settings-lite:aero-settings" \
+        "aero-lock-lite:aero-lock" \
+        "aero-store-lite:aero-store" \
+        "aero-firstboot-lite:aero-firstboot"
+    do
+        lite="${pair%%:*}"
+        full="${pair##*:}"
+        src=""
+        for cand in \
+            "${target_bin}/${lite}" \
+            "/usr/local/bin/${lite}" \
+            "/usr/local/share/aero/tools/${lite}" \
+            "${ROOT}/usr/local/share/aero/tools/${lite}"
+        do
+            [ -f "${cand}" ] && src="${cand}" && break
+        done
+        [ -n "${src}" ] || continue
+        install -m 0755 "${src}" "${target_bin}/${lite}"
+        # Canonical name → lite unless a real ELF already exists
+        if [ ! -e "${target_bin}/${full}" ]; then
+            ln -sf "${lite}" "${target_bin}/${full}"
+        elif file "${target_bin}/${full}" 2>/dev/null | grep -qi 'script\|text'; then
+            ln -sf "${lite}" "${target_bin}/${full}"
+        fi
+    done
+    echo "==> Lite desktop ready (no Swift compile required)"
+}
+
 fetch_prebuilt_bins() {
     target_bin="${ROOT}/usr/local/bin"
     mkdir -p "${target_bin}" /tmp/aero-bins
-    if [ -x "${target_bin}/aero-shell" ] || [ -x /usr/local/bin/aero-shell ]; then
-        echo "==> aero-shell already present"
-        return 0
-    fi
-    echo "==> Fetching prebuilt Aero desktop binaries…"
+    echo "==> Checking GitHub for optional Swift desktop ELFs…"
     if curl -fsSL -o /tmp/aero-bins/"${BIN_TGZ}" "${RELEASE_BASE}/${BIN_TGZ}"; then
         tar -xJf /tmp/aero-bins/"${BIN_TGZ}" -C /tmp/aero-bins
         for b in aero-shell aero-settings aero-lock aero-firstboot aero-store aero-update-ui; do
@@ -43,22 +72,16 @@ fetch_prebuilt_bins() {
                 install -m 0755 "/tmp/aero-bins/${b}" "${target_bin}/${b}"
             fi
         done
-        echo "==> Installed prebuilt binaries into ${target_bin}"
+        echo "==> Installed optional Swift binaries into ${target_bin}"
         return 0
     fi
-    echo "NOTE: prebuilt binaries not on release yet — will compile if swift is available"
+    echo "NOTE: no Swift ELFs on release — continuing with lite desktop"
     return 1
 }
 
-# Pull full offline package zip (swift/wine/firefox) when slim ISO lacks them
 fetch_full_offline_pkgs() {
-    if command -v swiftc >/dev/null 2>&1; then
-        return 0
-    fi
-    if [ -d "${OFFLINE}/All" ] && ls "${OFFLINE}/All"/swift510* >/dev/null 2>&1; then
-        return 0
-    fi
-    echo "==> Fetching full offline package set (swift/wine/…)…"
+    [ "${AERO_FETCH_FULL_PKGS:-0}" = "1" ] || return 0
+    echo "==> Fetching full offline package set…"
     mkdir -p /tmp/aero-full-pkgs "${OFFLINE}/All"
     if curl -fsSL -o /tmp/aero-full-pkgs/"${FULL_PKGS_ZIP}" "${RELEASE_BASE}/${FULL_PKGS_ZIP}"; then
         if command -v unzip >/dev/null 2>&1; then
@@ -69,7 +92,6 @@ fetch_full_offline_pkgs() {
     fi
 }
 
-# Configure local offline pkg repo if packages were shipped on the ISO
 if [ -d "${ROOT}${OFFLINE}/All" ] || [ -d "${OFFLINE}/All" ]; then
     REPO_DIR="${OFFLINE}"
     [ -d "${ROOT}${OFFLINE}/All" ] && REPO_DIR="${ROOT}${OFFLINE}"
@@ -106,7 +128,6 @@ LIST="${PACKAGES_FILE}"
 [ -f "${ROOT}${PACKAGES_FILE}" ] && LIST="${ROOT}${PACKAGES_FILE}"
 install_packages "${LIST}"
 
-# Enable services
 RC="${ROOT}/etc/rc.conf"
 touch "${RC}"
 for line in \
@@ -124,24 +145,13 @@ if [ -f "${ROOT}/etc/rc.conf.aero" ] || [ -f /etc/rc.conf.aero ]; then
     grep -q 'rc.conf.aero' "${RC}" 2>/dev/null || echo '. /etc/rc.conf.aero' >> "${RC}"
 fi
 
-# Prebuilt binaries first, then compile fallback
-if [ "${ROOT}" = "/" ]; then
-    fetch_prebuilt_bins || true
-    if [ ! -x /usr/local/bin/aero-shell ]; then
-        if command -v swiftc >/dev/null 2>&1; then
-            echo "==> Compiling Aero desktop (Swift + GTK4)"
-            /usr/local/sbin/aero-build-desktop || echo "WARNING: compile failed"
-        else
-            echo "NOTE: no aero-shell yet — install swift510 + gtk4, then: aero-build-desktop"
-            echo "  or wait for ${RELEASE_BASE}/${BIN_TGZ}"
-        fi
-    fi
-else
-    fetch_prebuilt_bins || true
-    if [ ! -x "${ROOT}/usr/local/bin/aero-shell" ]; then
-        if chroot "${ROOT}" /bin/sh -c 'command -v swiftc' >/dev/null 2>&1; then
-            chroot "${ROOT}" /usr/local/sbin/aero-build-desktop || true
-        fi
+# Lite first (always usable), then optional Swift ELFs, compile only if asked
+install_lite_desktop
+fetch_prebuilt_bins || true
+if [ "${AERO_COMPILE:-0}" = "1" ]; then
+    if [ "${ROOT}" = "/" ] && command -v swiftc >/dev/null 2>&1; then
+        echo "==> AERO_COMPILE=1 — building Swift desktop"
+        /usr/local/sbin/aero-build-desktop || echo "WARNING: compile failed (lite desktop still works)"
     fi
 fi
 
@@ -150,6 +160,10 @@ date -u +"Aero desktop bootstrap %Y-%m-%dT%H:%M:%SZ" > "${MARKER}" 2>/dev/null |
     echo "Aero desktop bootstrap done" > "${MARKER}"
 
 echo "Bootstrap finished."
-[ -x "${ROOT}/usr/local/bin/aero-shell" ] || [ -x /usr/local/bin/aero-shell ] && \
-    echo "Desktop binary: OK (aero-shell)" || echo "Desktop binary: PENDING"
-echo "Reboot into Aero (labwc + aero-shell)."
+if [ -x "${ROOT}/usr/local/bin/aero-shell" ] || [ -x /usr/local/bin/aero-shell ] || \
+   [ -x "${ROOT}/usr/local/bin/aero-shell-lite" ] || [ -x /usr/local/bin/aero-shell-lite ]; then
+    echo "Desktop: OK (lite and/or full)"
+else
+    echo "Desktop: MISSING lite scripts — check /usr/local/share/aero/tools"
+fi
+echo "Reboot into Aero (labwc + Start menu: Super+Space)."

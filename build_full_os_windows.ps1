@@ -102,11 +102,29 @@ Copy-IfExists (Join-Path $ProjectRoot "store\index.json") (Join-Path $share "sto
 Copy-IfExists (Join-Path $ProjectRoot "config\repos.conf") (Join-Path $OverlayDir "etc\aero\repos.conf") | Out-Null
 Copy-IfExists (Join-Path $ProjectRoot "releases\v1.0.1\aero-update-manifest.json") (Join-Path $OverlayDir "aero\aero-update-manifest.json") | Out-Null
 
-foreach ($tool in @("aero", "aero-sound", "aero-notify", "aero-open", "aexes", "aero-fetch-icon", "aero-windows")) {
+foreach ($tool in @(
+    "aero", "aero-sound", "aero-notify", "aero-open", "aexes", "aero-fetch-icon", "aero-windows",
+    "aero-shell-lite", "aero-settings-lite", "aero-lock-lite", "aero-store-lite", "aero-firstboot-lite"
+)) {
     Copy-IfExists (Join-Path $ProjectRoot "tools\$tool") (Join-Path $OverlayDir "usr\local\bin\$tool") | Out-Null
+    Copy-IfExists (Join-Path $ProjectRoot "tools\$tool") (Join-Path $share "tools\$tool") | Out-Null
+}
+# Canonical names point at lite scripts (no Swift ELFs required)
+foreach ($pair in @(
+    @{ Full = "aero-shell"; Lite = "aero-shell-lite" },
+    @{ Full = "aero-settings"; Lite = "aero-settings-lite" },
+    @{ Full = "aero-lock"; Lite = "aero-lock-lite" },
+    @{ Full = "aero-store"; Lite = "aero-store-lite" },
+    @{ Full = "aero-firstboot"; Lite = "aero-firstboot-lite" }
+)) {
+    $litePath = Join-Path $OverlayDir "usr\local\bin\$($pair.Lite)"
+    $fullPath = Join-Path $OverlayDir "usr\local\bin\$($pair.Full)"
+    if ((Test-Path $litePath) -and -not (Test-Path $fullPath)) {
+        Copy-Item $litePath $fullPath -Force
+    }
 }
 
-# Inject prebuilt FreeBSD desktop ELFs when available (Actions artifact / release tarball)
+# Inject prebuilt FreeBSD desktop ELFs when available (optional override)
 $prebuiltDirs = @(
     (Join-Path $ProjectRoot "out-bin"),
     (Join-Path $ProjectRoot ".cache\aero-desktop"),
@@ -140,7 +158,7 @@ foreach ($dir in $prebuiltDirs) {
     }
 }
 if ($injected -eq 0) {
-    Write-Host "==> No prebuilt aero-shell yet (ISO will fetch/compile on first boot)" -ForegroundColor DarkYellow
+    Write-Host "==> Using lite desktop scripts (no Swift ELFs needed)" -ForegroundColor Green
 }
 foreach ($f in @("main.swift", "aero-settings.swift", "aero-lock.swift", "aero-firstboot.swift", "aero-store.swift", "aero-update-ui.swift")) {
     Copy-IfExists (Join-Path $ProjectRoot $f) (Join-Path $share "src\$f") | Out-Null

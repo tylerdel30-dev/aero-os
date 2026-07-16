@@ -14,13 +14,14 @@ vulkan-radeon
 wayland
 wayland-protocols
 labwc
+swaybg
+swaylock
 xwayland
 grim
 wl-clipboard
 wlr-randr
 gtk4
 gtk4-layer-shell
-swift510
 pkgconf
 pipewire
 wireplumber
@@ -33,7 +34,6 @@ gpart
 parted
 gptfdisk
 efibootmgr
-grub2-bhyve
 foot
 thunar
 dbus
@@ -42,8 +42,10 @@ openssh-portable
 inter-font
 pkg
 xdg-utils
-firefox
-wine
-wine-mono
-wine-gecko
 shared-mime-info
+# Optional heavy apps (network or full offline zip — not required for desktop)
+# swift510
+# firefox
+# wine
+# wine-mono
+# wine-gecko

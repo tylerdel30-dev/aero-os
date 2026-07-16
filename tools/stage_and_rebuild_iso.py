@@ -76,8 +76,41 @@ def main() -> int:
         else:
             copy_into(src, share / src.name)
 
-    for tool in ("aero", "aero-sound", "aero-notify", "aero-open", "aexes", "aero-fetch-icon", "aero-windows"):
+    for tool in (
+        "aero",
+        "aero-sound",
+        "aero-notify",
+        "aero-open",
+        "aexes",
+        "aero-fetch-icon",
+        "aero-windows",
+        "aero-shell-lite",
+        "aero-settings-lite",
+        "aero-lock-lite",
+        "aero-store-lite",
+        "aero-firstboot-lite",
+    ):
         copy_into(ROOT / "tools" / tool, OVERLAY / "usr" / "local" / "bin" / tool)
+        # Also keep copies under share for bootstrap rediscovery
+        copy_into(ROOT / "tools" / tool, share / "tools" / tool)
+
+    # Canonical names → lite scripts (ISO boots without Swift ELFs)
+    bin_dir = OVERLAY / "usr" / "local" / "bin"
+    for full, lite in (
+        ("aero-shell", "aero-shell-lite"),
+        ("aero-settings", "aero-settings-lite"),
+        ("aero-lock", "aero-lock-lite"),
+        ("aero-store", "aero-store-lite"),
+        ("aero-firstboot", "aero-firstboot-lite"),
+    ):
+        lite_path = bin_dir / lite
+        full_path = bin_dir / full
+        if lite_path.is_file() and not full_path.exists():
+            try:
+                full_path.symlink_to(lite)
+            except OSError:
+                shutil.copy2(lite_path, full_path)
+                full_path.chmod(0o755)
 
     copy_into(ROOT / "config" / "oauth.conf.example", OVERLAY / "usr" / "local" / "share" / "aero" / "docs" / "oauth.conf.example")
     copy_into(ROOT / "config" / "oauth.conf.example", OVERLAY / "etc" / "aero" / "oauth.conf.example")
@@ -168,9 +201,9 @@ def main() -> int:
 
     readme = OVERLAY / "AERO-README.TXT"
     readme.write_text(
-        "Aero OS 1.0.1 Stratus - turnkey path: aero-bootstrap (fetches bins) or aero-build-desktop\n"
-        "Offline packages: /usr/local/share/aero/offline-packages\n"
-        "If /usr/local/bin/aero-shell is present on this ISO, no compile is required.\n",
+        "Aero OS 1.0.1 Stratus — boots with aero-shell-lite (no Swift compile).\n"
+        "Start menu: Super+Space or right-click desktop.\n"
+        "Optional Swift GTK shell: AERO_COMPILE=1 aero-bootstrap  (needs swift510)\n",
         encoding="ascii",
     )
     shutil.copy2(readme, OVERLAY / "README.TXT")

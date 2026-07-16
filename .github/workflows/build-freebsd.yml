@@ -1,15 +1,8 @@
 name: Build Aero desktop binaries (FreeBSD)
 
+# Manual only — default desktop is aero-*-lite (no FreeBSD Swift CI required).
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - "main.swift"
-      - "aero-*.swift"
-      - "src/**"
-      - "overlay/usr/local/sbin/aero-build-desktop"
-      - ".github/workflows/build-freebsd.yml"
 
 jobs:
   freebsd-swift:
@@ -27,35 +20,24 @@ jobs:
           prepare: |
             export IGNORE_OSVERSION=yes
             export ASSUME_ALWAYS_YES=yes
-            # latest pkgs may be built for 14.4 while VM is 14.3
             pkg update -f || true
             pkg install -y swift510 gtk4 gtk4-layer-shell pkgconf labwc gmake curl || \
               pkg install -y -f swift510 gtk4 gtk4-layer-shell pkgconf labwc gmake curl
-            # FreeBSD ports put swiftc under /usr/local/swift510/bin
             if [ -x /usr/local/swift510/bin/swiftc ]; then
               ln -sf /usr/local/swift510/bin/swiftc /usr/local/bin/swiftc
               ln -sf /usr/local/swift510/bin/swift /usr/local/bin/swift || true
-              echo 'export PATH=/usr/local/swift510/bin:$PATH' > /etc/profile.d/aero-swift.sh
             fi
             export PATH="/usr/local/swift510/bin:/usr/local/bin:${PATH}"
             command -v swiftc
             swiftc --version
-            pkg-config --modversion gtk4 || true
           run: |
             set -e
             export IGNORE_OSVERSION=yes
             export PATH="/usr/local/swift510/bin:/usr/local/bin:/usr/bin:/bin:${PATH}"
             WORK="$(pwd)"
-            echo "workspace=$WORK"
-            command -v swiftc
-            swiftc --version
-            ls -la
             chmod +x overlay/usr/local/sbin/aero-build-desktop
             mkdir -p /usr/local/share/aero/src /usr/local/bin /usr/local/sbin
             cp -f main.swift aero-*.swift /usr/local/share/aero/src/
-            if [ -d src ]; then
-              cp -f src/*.swift /usr/local/share/aero/src/ 2>/dev/null || true
-            fi
             cp -f overlay/usr/local/sbin/aero-build-desktop /usr/local/sbin/
             /usr/local/sbin/aero-build-desktop
             mkdir -p "$WORK/out-bin"
@@ -66,7 +48,6 @@ jobs:
                   /usr/local/bin/aero-store \
                   /usr/local/bin/aero-update-ui \
                   "$WORK/out-bin/"
-            file "$WORK/out-bin/"* || true
             ls -la "$WORK/out-bin"
 
       - name: Upload binaries artifact
@@ -84,11 +65,4 @@ jobs:
           cd out-bin
           tar -cJf ../aero-desktop-amd64.tar.xz aero-shell aero-settings aero-lock aero-firstboot aero-store aero-update-ui
           cd ..
-          gh release upload v1.0.1 aero-desktop-amd64.tar.xz --repo ${{ github.repository }} --clobber || \
-            gh release create v1.0.1 aero-desktop-amd64.tar.xz --repo ${{ github.repository }} --title "Aero OS v1.0.1" --notes "Desktop binaries"
-          if [ -f aero-update-manifest.json ]; then
-            gh release upload v1.0.1 aero-update-manifest.json --repo ${{ github.repository }} --clobber || true
-          fi
-          if [ -f releases/v1.0.1/aero-update-manifest.json ]; then
-            gh release upload v1.0.1 releases/v1.0.1/aero-update-manifest.json --repo ${{ github.repository }} --clobber || true
-          fi
+          gh release upload v1.0.1 aero-desktop-amd64.tar.xz --repo ${{ github.repository }} --clobber || true

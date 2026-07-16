@@ -1,0 +1,96 @@
+#!/bin/sh
+#
+# aero-shell-lite — no-compile Aero desktop (labwc + wallpaper + menus)
+# Works from install media without FreeBSD Swift ELF binaries.
+#
+set -eu
+
+AERO_SHARE="${AERO_SHARE:-/usr/local/share/aero}"
+WALLPAPER_DIR="${AERO_SHARE}/wallpapers"
+CONFIG_DIR="${HOME}/.config/aero"
+MARKER="${HOME}/.config/aero/lite-shell-started"
+
+mkdir -p "${CONFIG_DIR}" "${XDG_RUNTIME_DIR:-/tmp/runtime-$(id -u)}"
+
+play() {
+    command -v aero-sound >/dev/null 2>&1 && aero-sound "$1" 2>/dev/null || true
+}
+
+pick_wallpaper() {
+    theme="dark"
+    if [ -f "${CONFIG_DIR}/appearance" ]; then
+        theme="$(tr -d '[:space:]' < "${CONFIG_DIR}/appearance")"
+    fi
+    case "${theme}" in
+        light|dark|night) ;;
+        *) theme="dark" ;;
+    esac
+    for f in "${WALLPAPER_DIR}/${theme}.png" "${WALLPAPER_DIR}/dark.png" "${AERO_SHARE}/aero-logo.png"; do
+        [ -f "$f" ] && { echo "$f"; return 0; }
+    done
+    return 1
+}
+
+set_wallpaper() {
+    wp="$(pick_wallpaper || true)"
+    [ -n "${wp:-}" ] || return 0
+    # Prefer dedicated wallpaper helpers; otherwise leave compositor background alone
+    if command -v swaybg >/dev/null 2>&1; then
+        pkill -x swaybg 2>/dev/null || true
+        swaybg -i "${wp}" -m fill &
+    elif command -v wbg >/dev/null 2>&1; then
+        pkill -x wbg 2>/dev/null || true
+        wbg "${wp}" &
+    elif command -v swayimg >/dev/null 2>&1; then
+        true
+    fi
+}
+
+ensure_user_labwc_menu() {
+    # User menu overrides system if present; copy defaults once
+    user_lab="${HOME}/.config/labwc"
+    mkdir -p "${user_lab}"
+    if [ ! -f "${user_lab}/menu.xml" ] && [ -f /etc/xdg/labwc/menu.xml ]; then
+        cp /etc/xdg/labwc/menu.xml "${user_lab}/menu.xml"
+    fi
+}
+
+notify() {
+    title="$1"
+    body="$2"
+    if command -v aero-notify >/dev/null 2>&1; then
+        aero-notify "${title}" "${body}" 2>/dev/null || true
+    fi
+}
+
+# Optional: thin status ticker in the background (clock file for scripts)
+status_loop() {
+    while true; do
+        date '+%a %b %d  %H:%M' > "${CONFIG_DIR}/clock.txt" 2>/dev/null || true
+        sleep 30
+    done
+}
+
+main() {
+    ensure_user_labwc_menu
+    set_wallpaper
+    play "startup"
+
+    if [ ! -f "${MARKER}" ]; then
+        notify "Aero OS" "Lite desktop ready — Super+Space opens the Start menu"
+        : > "${MARKER}"
+    fi
+
+    status_loop &
+    STATUS_PID=$!
+
+    # Keep process alive while session runs (labwc owns the compositor)
+    # Re-apply wallpaper on appearance changes every few minutes
+    trap 'kill ${STATUS_PID} 2>/dev/null || true; play shutdown; exit 0' TERM INT HUP
+    while true; do
+        sleep 120
+        set_wallpaper
+    done
+}
+
+main "$@"

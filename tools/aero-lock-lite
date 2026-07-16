@@ -1,0 +1,33 @@
+#!/bin/sh
+#
+# aero-lock-lite — session lock without Swift (swaylock/waylock/fallback)
+#
+set -eu
+
+command -v aero-sound >/dev/null 2>&1 && aero-sound lock || true
+
+if command -v swaylock >/dev/null 2>&1; then
+    exec swaylock -f -c 0a0a12
+fi
+if command -v waylock >/dev/null 2>&1; then
+    exec waylock
+fi
+if command -v gtklock >/dev/null 2>&1; then
+    exec gtklock
+fi
+
+# Last resort: blank terminal gate (not a secure locker — install swaylock)
+if command -v foot >/dev/null 2>&1; then
+    exec foot -T "Aero Lock" -e sh -c '
+        clear
+        echo "Aero OS — screen locked (lite)"
+        echo "Install swaylock for a real lock screen."
+        echo ""
+        printf "Press Enter to unlock… "
+        read -r _
+        command -v aero-sound >/dev/null 2>&1 && aero-sound unlock || true
+    '
+fi
+
+echo "aero-lock: no locker found (pkg install swaylock)" >&2
+exit 1

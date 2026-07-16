@@ -51,14 +51,20 @@
     <keybind key="W-e">
       <action name="Execute" command="thunar"/>
     </keybind>
+    <keybind key="W-space">
+      <action name="ShowMenu" menu="root-menu"/>
+    </keybind>
+    <keybind key="W-r">
+      <action name="ShowMenu" menu="root-menu"/>
+    </keybind>
     <keybind key="W-i">
-      <action name="Execute" command="aero-settings"/>
+      <action name="Execute" command="sh -c 'command -v aero-settings >/dev/null &amp;&amp; aero-settings || aero-settings-lite'"/>
     </keybind>
     <keybind key="W-s">
-      <action name="Execute" command="aero-store"/>
+      <action name="Execute" command="sh -c 'command -v aero-store >/dev/null &amp;&amp; aero-store || aero-store-lite'"/>
     </keybind>
     <keybind key="W-l">
-      <action name="Execute" command="aero-lock"/>
+      <action name="Execute" command="sh -c 'command -v aero-lock >/dev/null &amp;&amp; aero-lock || aero-lock-lite'"/>
     </keybind>
     <keybind key="Print">
       <action name="Execute" command="aero screenshot"/>
@@ -105,6 +111,11 @@
       </mousebind>
       <mousebind button="Left" action="DoubleClick">
         <action name="ToggleMaximize"/>
+      </mousebind>
+    </context>
+    <context name="Root">
+      <mousebind button="Right" action="Press">
+        <action name="ShowMenu" menu="root-menu"/>
       </mousebind>
     </context>
   </mouse>
