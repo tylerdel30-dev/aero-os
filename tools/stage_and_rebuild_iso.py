@@ -146,14 +146,19 @@ def main() -> int:
         dest_all.mkdir(parents=True, exist_ok=True)
         count = 0
         skipped = 0
-        skip_prefixes = ("llvm", "gcc", "rust", "swift510")
+        skip_prefixes = ("llvm", "gcc14", "rust", "wine-mono", "wine-gecko")
         for pkg in PKG_ALL.glob("*.pkg"):
-            if pkg.name.lower().startswith(skip_prefixes):
+            lower = pkg.name.lower()
+            if lower.startswith(skip_prefixes):
+                skipped += 1
+                continue
+            # wine-VERSION.pkg (core) — fetch from full zip to make room for swift510
+            if lower.startswith("wine-") or lower.startswith("wine_"):
                 skipped += 1
                 continue
             shutil.copy2(pkg, dest_all / pkg.name)
             count += 1
-        print(f"Staged {count} offline packages (skipped {skipped} toolchain pkgs)")
+        print(f"Staged {count} offline packages (skipped {skipped} toolchain/wine pkgs)")
         (share / "offline-packages" / "meta.conf").write_text(
             'version = "2";\ndumping_period = "0";\n', encoding="ascii"
         )

@@ -97,6 +97,13 @@ def main() -> int:
     iso.write(str(OUT))
     iso.close()
 
+    # pycdlib zeroes the hybrid MBR/GPT system area — restore for USB/Rufus DD boot
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from fix_hybrid_boot import patch_hybrid
+
+    print("Restoring FreeBSD hybrid MBR/GPT for USB boot...")
+    patch_hybrid(FREEBSD, OUT)
+
     mb = OUT.stat().st_size / (1024 * 1024)
     print(f"Done: {mb:.1f} MB -> {OUT.name}")
     if mb < 400:

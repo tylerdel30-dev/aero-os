@@ -49,8 +49,8 @@ pkg
 xdg-utils
 shared-mime-info
 firefox
-wine
-wine-mono
-wine-gecko
-# Optional (large) — also in AeroOS-1.0.1-offline-packages-full.zip
-# swift510
+# Wine suite lives in AeroOS-1.0.1-offline-packages-full.zip (ISO size limit)
+# wine
+# wine-mono
+# wine-gecko
+swift510
