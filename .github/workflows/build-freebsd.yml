@@ -25,25 +25,33 @@ jobs:
           usesh: true
           sync: rsync
           prepare: |
-            pkg update -f
-            pkg install -y swift510 gtk4 gtk4-layer-shell pkgconf labwc gmake
+            export IGNORE_OSVERSION=yes
+            export ASSUME_ALWAYS_YES=yes
+            # latest pkgs may be built for 14.4 while VM is 14.3
+            pkg update -f || true
+            pkg install -y swift510 gtk4 gtk4-layer-shell pkgconf labwc gmake curl || \
+              pkg install -y -f swift510 gtk4 gtk4-layer-shell pkgconf labwc gmake curl
             ln -sf /usr/local/bin/swiftc /usr/local/bin/swiftc-aero || true
-            # Ensure swiftc is on PATH (swift510 package)
             if ! command -v swiftc >/dev/null 2>&1; then
               ls /usr/local/bin/swift* || true
-              for c in /usr/local/bin/swiftc /usr/local/lib/swift*/bin/swiftc; do
+              for c in /usr/local/bin/swiftc /usr/local/lib/swift*/bin/swiftc /usr/local/libexec/swift*/bin/swiftc; do
                 [ -x "$c" ] && ln -sf "$c" /usr/local/bin/swiftc && break
               done
             fi
             swiftc --version || true
+            pkg-config --modversion gtk4 || true
           run: |
             set -e
+            export IGNORE_OSVERSION=yes
             WORK="$(pwd)"
             echo "workspace=$WORK"
             ls -la
             chmod +x overlay/usr/local/sbin/aero-build-desktop
             mkdir -p /usr/local/share/aero/src /usr/local/bin /usr/local/sbin
             cp -f main.swift aero-*.swift /usr/local/share/aero/src/
+            if [ -d src ]; then
+              cp -f src/*.swift /usr/local/share/aero/src/ 2>/dev/null || true
+            fi
             cp -f overlay/usr/local/sbin/aero-build-desktop /usr/local/sbin/
             /usr/local/sbin/aero-build-desktop
             mkdir -p "$WORK/out-bin"
