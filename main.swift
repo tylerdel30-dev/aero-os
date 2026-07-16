@@ -14,9 +14,10 @@ typealias GApplication = OpaquePointer
 let GTK_APPLICATION_FLAGS_NONE: GApplicationFlags = GApplicationFlags(rawValue: 0)
 let GTK_ORIENTATION_HORIZONTAL: GtkOrientation = GtkOrientation(rawValue: 0)
 let GTK_ORIENTATION_VERTICAL: GtkOrientation = GtkOrientation(rawValue: 1)
-let GTK_ALIGN_CENTER: GtkAlign = GtkAlign(rawValue: 3)
-let GTK_ALIGN_END: GtkAlign = GtkAlign(rawValue: 2)
+let GTK_ALIGN_FILL: GtkAlign = GtkAlign(rawValue: 0)
 let GTK_ALIGN_START: GtkAlign = GtkAlign(rawValue: 1)
+let GTK_ALIGN_END: GtkAlign = GtkAlign(rawValue: 2)
+let GTK_ALIGN_CENTER: GtkAlign = GtkAlign(rawValue: 3)
 let GTK_STYLE_PROVIDER_PRIORITY_APPLICATION: Int32 = 600
 let G_SOURCE_REMOVE: Int32 = 0
 let G_SPAWN_SEARCH_PATH: GSpawnFlags = GSpawnFlags(rawValue: 1 << 1)
@@ -71,7 +72,7 @@ func gtk_application_new(_ applicationID: UnsafePointer<CChar>, _ flags: GApplic
 func g_signal_connect_data(
     _ instance: OpaquePointer?,
     _ detailedSignal: UnsafePointer<CChar>,
-    _ handler: @convention(c) (OpaquePointer?, OpaquePointer?, OpaquePointer?) -> Void,
+    _ handler: @convention(c) (OpaquePointer?, OpaquePointer?) -> Void,
     _ data: UnsafeMutableRawPointer?,
     _ destroyData: OpaquePointer?,
     _ connectFlags: Int32
