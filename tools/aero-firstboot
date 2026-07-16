@@ -1,0 +1,6 @@
+#!/bin/sh
+if [ -x /usr/local/bin/aero-firstboot-gtk ] && command -v python3 >/dev/null 2>&1; then
+    exec /usr/local/bin/aero-firstboot-gtk "$@"
+fi
+[ -x /usr/local/bin/aero-firstboot.elf ] && exec /usr/local/bin/aero-firstboot.elf "$@"
+exec /usr/local/bin/aero-firstboot-lite "$@"

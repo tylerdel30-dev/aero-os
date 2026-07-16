@@ -1,0 +1,6 @@
+#!/bin/sh
+if [ -x /usr/local/bin/aero-settings-gtk ] && command -v python3 >/dev/null 2>&1; then
+    exec /usr/local/bin/aero-settings-gtk "$@"
+fi
+[ -x /usr/local/bin/aero-settings.elf ] && exec /usr/local/bin/aero-settings.elf "$@"
+exec /usr/local/bin/aero-settings-lite "$@"
