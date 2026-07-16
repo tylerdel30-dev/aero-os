@@ -122,11 +122,55 @@ def main() -> int:
             'version = "2";\ndumping_period = "0";\n', encoding="ascii"
         )
 
+    # Prebuilt FreeBSD amd64 desktop ELFs (from Actions / release download)
+    bin_dir = OVERLAY / "usr" / "local" / "bin"
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    prebuilt_candidates = [
+        ROOT / "out-bin",
+        ROOT / ".cache" / "aero-desktop",
+        ROOT / "out" / "aero-desktop",
+    ]
+    tarball = ROOT / "out" / "aero-desktop-amd64.tar.xz"
+    if not tarball.exists():
+        tarball = ROOT / ".cache" / "aero-desktop-amd64.tar.xz"
+    if tarball.exists():
+        extract = ROOT / "build-workspace" / "prebuilt-bins"
+        if extract.exists():
+            shutil.rmtree(extract)
+        extract.mkdir(parents=True)
+        subprocess.check_call(["tar", "-xJf", str(tarball), "-C", str(extract)])
+        prebuilt_candidates.insert(0, extract)
+        print(f"Extracted prebuilt tarball: {tarball.name}")
+
+    injected = 0
+    for cand in prebuilt_candidates:
+        if not cand.is_dir():
+            continue
+        for name in (
+            "aero-shell",
+            "aero-settings",
+            "aero-lock",
+            "aero-firstboot",
+            "aero-store",
+            "aero-update-ui",
+        ):
+            src = cand / name
+            if src.is_file():
+                dst = bin_dir / name
+                shutil.copy2(src, dst)
+                dst.chmod(0o755)
+                injected += 1
+        if injected:
+            print(f"Injected {injected} prebuilt desktop binaries from {cand}")
+            break
+    if not injected:
+        print("NOTE: no prebuilt aero-shell yet — ISO will bootstrap/compile on first boot")
+
     readme = OVERLAY / "AERO-README.TXT"
     readme.write_text(
-        "Aero OS 1.0.1 Stratus - turnkey path: aero-bootstrap then aero-build-desktop\n"
+        "Aero OS 1.0.1 Stratus - turnkey path: aero-bootstrap (fetches bins) or aero-build-desktop\n"
         "Offline packages: /usr/local/share/aero/offline-packages\n"
-        "Binaries compile on FreeBSD via Swift/GTK4 (GitHub Actions workflow available).\n",
+        "If /usr/local/bin/aero-shell is present on this ISO, no compile is required.\n",
         encoding="ascii",
     )
     shutil.copy2(readme, OVERLAY / "README.TXT")

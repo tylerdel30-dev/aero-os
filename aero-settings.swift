@@ -295,12 +295,18 @@ struct OAuthProvider {
 
     var fullAuthorizeURL: String {
         var components = URLComponents(string: authorizeURL)!
-        components.queryItems = [
+        var items = [
             URLQueryItem(name: "client_id", value: clientID),
             URLQueryItem(name: "response_type", value: "code"),
             URLQueryItem(name: "redirect_uri", value: redirectURI),
             URLQueryItem(name: "scope", value: scope),
         ]
+        // Apple Sign In requires response_mode for web/loopback clients
+        if name == "apple" {
+            items.append(URLQueryItem(name: "response_mode", value: "query"))
+            items.append(URLQueryItem(name: "state", value: "aero-apple"))
+        }
+        components.queryItems = items
         return components.url!.absoluteString
     }
 }
@@ -849,7 +855,8 @@ func aeroSignInMicrosoft(_ button: OpaquePointer?, _ userData: OpaquePointer?) {
 
 @_cdecl("aero_signin_apple")
 func aeroSignInApple(_ button: OpaquePointer?, _ userData: OpaquePointer?) {
-    beginSignIn(provider: appleProvider)
+    // Apple has no public device-code API — loopback with Services ID from oauth.conf
+    beginDeviceCodeSignIn(provider: appleProvider)
 }
 
 @_cdecl("aero_signin_github")

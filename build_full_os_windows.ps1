@@ -102,8 +102,45 @@ Copy-IfExists (Join-Path $ProjectRoot "store\index.json") (Join-Path $share "sto
 Copy-IfExists (Join-Path $ProjectRoot "config\repos.conf") (Join-Path $OverlayDir "etc\aero\repos.conf") | Out-Null
 Copy-IfExists (Join-Path $ProjectRoot "releases\v1.0.1\aero-update-manifest.json") (Join-Path $OverlayDir "aero\aero-update-manifest.json") | Out-Null
 
-foreach ($tool in @("aero", "aero-sound", "aero-notify", "aero-open", "aexes", "aero-fetch-icon")) {
+foreach ($tool in @("aero", "aero-sound", "aero-notify", "aero-open", "aexes", "aero-fetch-icon", "aero-windows")) {
     Copy-IfExists (Join-Path $ProjectRoot "tools\$tool") (Join-Path $OverlayDir "usr\local\bin\$tool") | Out-Null
+}
+
+# Inject prebuilt FreeBSD desktop ELFs when available (Actions artifact / release tarball)
+$prebuiltDirs = @(
+    (Join-Path $ProjectRoot "out-bin"),
+    (Join-Path $ProjectRoot ".cache\aero-desktop"),
+    (Join-Path $ProjectRoot "out\aero-desktop")
+)
+$tarball = Join-Path $ProjectRoot "out\aero-desktop-amd64.tar.xz"
+if (-not (Test-Path $tarball)) {
+    $tarball = Join-Path $ProjectRoot ".cache\aero-desktop-amd64.tar.xz"
+}
+if (Test-Path $tarball) {
+    $extract = Join-Path $ProjectRoot "build-workspace\prebuilt-bins"
+    if (Test-Path $extract) { Remove-Item -Recurse -Force $extract }
+    New-Dir $extract
+    Write-Host "==> Extracting prebuilt desktop binaries" -ForegroundColor Green
+    tar -xJf $tarball -C $extract
+    $prebuiltDirs = @($extract) + $prebuiltDirs
+}
+$injected = 0
+foreach ($dir in $prebuiltDirs) {
+    if (-not (Test-Path $dir)) { continue }
+    foreach ($name in @("aero-shell", "aero-settings", "aero-lock", "aero-firstboot", "aero-store", "aero-update-ui")) {
+        $src = Join-Path $dir $name
+        if (Test-Path $src) {
+            Copy-Item $src (Join-Path $OverlayDir "usr\local\bin\$name") -Force
+            $injected++
+        }
+    }
+    if ($injected -gt 0) {
+        Write-Host "==> Injected $injected prebuilt desktop binaries" -ForegroundColor Green
+        break
+    }
+}
+if ($injected -eq 0) {
+    Write-Host "==> No prebuilt aero-shell yet (ISO will fetch/compile on first boot)" -ForegroundColor DarkYellow
 }
 foreach ($f in @("main.swift", "aero-settings.swift", "aero-lock.swift", "aero-firstboot.swift", "aero-store.swift", "aero-update-ui.swift")) {
     Copy-IfExists (Join-Path $ProjectRoot $f) (Join-Path $share "src\$f") | Out-Null

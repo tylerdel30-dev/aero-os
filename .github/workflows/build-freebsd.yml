@@ -7,6 +7,7 @@ on:
     paths:
       - "main.swift"
       - "aero-*.swift"
+      - "src/**"
       - "overlay/usr/local/sbin/aero-build-desktop"
       - ".github/workflows/build-freebsd.yml"
 
@@ -72,4 +73,10 @@ jobs:
           tar -cJf ../aero-desktop-amd64.tar.xz aero-shell aero-settings aero-lock aero-firstboot aero-store aero-update-ui
           cd ..
           gh release upload v1.0.1 aero-desktop-amd64.tar.xz --repo ${{ github.repository }} --clobber || \
-            gh release create v1.0.1 aero-desktop-amd64.tar.xz --repo ${{ github.repository }} --title "Aero OS v1.0.1" --notes "Desktop binaries" || true
+            gh release create v1.0.1 aero-desktop-amd64.tar.xz --repo ${{ github.repository }} --title "Aero OS v1.0.1" --notes "Desktop binaries"
+          if [ -f aero-update-manifest.json ]; then
+            gh release upload v1.0.1 aero-update-manifest.json --repo ${{ github.repository }} --clobber || true
+          fi
+          if [ -f releases/v1.0.1/aero-update-manifest.json ]; then
+            gh release upload v1.0.1 releases/v1.0.1/aero-update-manifest.json --repo ${{ github.repository }} --clobber || true
+          fi

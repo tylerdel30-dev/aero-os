@@ -1,9 +1,19 @@
 # Aero OAuth client IDs (device-code / loopback)
 # Copy to ~/.config/aero/oauth.conf and fill in values from each provider console.
 #
-# GitHub: https://github.com/settings/developers  (OAuth App, enable Device Flow)
-# Microsoft: https://portal.azure.com  (App registration, allow public client / device code)
-# Apple: https://developer.apple.com  (Services ID + redirect http://127.0.0.1:8765/callback)
+# GitHub: https://github.com/settings/developers
+#   - New OAuth App → enable Device Flow
+#   - Callback (unused for device flow): http://127.0.0.1:53682/callback
+#
+# Microsoft: https://portal.azure.com → App registrations
+#   - Allow public client flows / device code
+#   - Redirect: http://127.0.0.1:53682/callback
+#
+# Apple: https://developer.apple.com → Certificates, Identifiers & Profiles
+#   - Create a Services ID, enable Sign In with Apple
+#   - Return URL must be exactly: http://127.0.0.1:53682/callback
+#   - Apple has no device-code API; Aero uses loopback OAuth for Apple only
+#   - Requires Apple Developer Program membership
 
 github_client_id=
 microsoft_client_id=
