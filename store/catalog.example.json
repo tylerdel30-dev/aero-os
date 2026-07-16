@@ -1,0 +1,15 @@
+# Example catalog.json for the aero-store GitHub repo (main branch)
+# Upload .aero files as Release assets with matching names.
+
+{
+  "store_version": 1,
+  "apps": [
+    {
+      "id": "app.discord",
+      "name": "Discord",
+      "aliases": ["discord"],
+      "version": "1.0.0",
+      "download": "https://github.com/tylerdel30-dev/aero-os/releases/download/v1.0.0/discord.aero"
+    }
+  ]
+}

@@ -1,0 +1,75 @@
+name: Build Aero desktop binaries (FreeBSD)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "main.swift"
+      - "aero-*.swift"
+      - "overlay/usr/local/sbin/aero-build-desktop"
+      - ".github/workflows/build-freebsd.yml"
+
+jobs:
+  freebsd-swift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: FreeBSD VM - compile Aero shell
+        uses: vmactions/freebsd-vm@v1
+        with:
+          release: "14.3"
+          usesh: true
+          sync: rsync
+          prepare: |
+            pkg update -f
+            pkg install -y swift510 gtk4 gtk4-layer-shell pkgconf labwc gmake
+            ln -sf /usr/local/bin/swiftc /usr/local/bin/swiftc-aero || true
+            # Ensure swiftc is on PATH (swift510 package)
+            if ! command -v swiftc >/dev/null 2>&1; then
+              ls /usr/local/bin/swift* || true
+              for c in /usr/local/bin/swiftc /usr/local/lib/swift*/bin/swiftc; do
+                [ -x "$c" ] && ln -sf "$c" /usr/local/bin/swiftc && break
+              done
+            fi
+            swiftc --version || true
+          run: |
+            set -e
+            WORK="$(pwd)"
+            echo "workspace=$WORK"
+            ls -la
+            chmod +x overlay/usr/local/sbin/aero-build-desktop
+            mkdir -p /usr/local/share/aero/src /usr/local/bin /usr/local/sbin
+            cp -f main.swift aero-*.swift /usr/local/share/aero/src/
+            cp -f overlay/usr/local/sbin/aero-build-desktop /usr/local/sbin/
+            /usr/local/sbin/aero-build-desktop
+            mkdir -p "$WORK/out-bin"
+            cp -f /usr/local/bin/aero-shell \
+                  /usr/local/bin/aero-settings \
+                  /usr/local/bin/aero-lock \
+                  /usr/local/bin/aero-firstboot \
+                  /usr/local/bin/aero-store \
+                  /usr/local/bin/aero-update-ui \
+                  "$WORK/out-bin/"
+            file "$WORK/out-bin/"* || true
+            ls -la "$WORK/out-bin"
+
+      - name: Upload binaries artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aero-desktop-freebsd-amd64
+          path: out-bin/
+
+      - name: Publish binaries to release v1.0.1
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          cd out-bin
+          tar -cJf ../aero-desktop-amd64.tar.xz aero-shell aero-settings aero-lock aero-firstboot aero-store aero-update-ui
+          cd ..
+          gh release upload v1.0.1 aero-desktop-amd64.tar.xz --repo ${{ github.repository }} --clobber || \
+            gh release create v1.0.1 aero-desktop-amd64.tar.xz --repo ${{ github.repository }} --title "Aero OS v1.0.1" --notes "Desktop binaries" || true

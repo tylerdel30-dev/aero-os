@@ -1,0 +1,1042 @@
+#!/bin/sh
+#
+# aero — the Aero OS command language (v1.0)
+#
+# Case-insensitive; PowerShell-style flags and [brackets] are accepted:
+#   aero install discord   ==   Aero -Install [Discord]
+#
+# APPS
+#   install <app>          install ANY app (store, packages, or from the internet)
+#   remove <app>           uninstall a .aero app
+#   search <name>          search store + packages + internet
+#   apps                   list installed .aero apps
+#   run <app|file>         run an app, .aero bundle, or .exe (AexeS)
+#   web <name> <url>       create a .aero web app from any website
+#   store                  open the Aero App Store
+#
+# SYSTEM
+#   update                 check for OS updates (GitHub Releases)
+#   upgrade                install OS updates (never touches /home)
+#   cleanup                remove orphan packages + caches
+#   services [list]        list system services
+#   service <name> <start|stop|restart>
+#   info                   system information
+#   doctor                 health check
+#   version                Aero OS version
+#
+# DESKTOP
+#   appearance <mode>      light / dark / night
+#   wallpaper <file> <mode> use your own wallpaper for a mode
+#   screenshot             capture screen to ~/Pictures
+#   notify <title> <body>  post a notification
+#   lock                   lock the screen
+#
+# HARDWARE
+#   volume <up|down|mute|0-100>
+#   brightness <up|down|10-100>
+#   wifi <list|status>
+#   battery                battery status
+#
+# FILES
+#   trash <file...>        move files to trash
+#   trash-empty            empty the trash
+#   backup                 archive your home folder to ~/Backups
+#
+set -u
+
+AERO_VERSION_FILE="/etc/aero-version"
+AERO_RELEASE_FILE="/etc/aero-release"
+REPOS_CONF="/etc/aero/repos.conf"
+STORE_INDEX="/usr/local/share/aero/store/index.json"
+DOWNLOAD_CACHE="${HOME}/.cache/aero/downloads"
+CONFIG_DIR="${HOME}/.config/aero"
+APPS_DIR="${HOME}/.local/share/aero/apps"
+TRASH_DIR="${HOME}/.local/share/aero/trash"
+
+# Defaults — overridden by /etc/aero/repos.conf after you set your GitHub username
+OS_REPO="tylerdel30-dev/aero-os"
+APPS_REPO="tylerdel30-dev/aero-os"
+APPS_CATALOG_URL=""
+
+load_repos_conf() {
+    [ -f "${REPOS_CONF}" ] || return 0
+    # shellcheck disable=SC1090
+    while IFS='=' read -r key value; do
+        case "${key}" in
+            \#*|"") continue ;;
+            os_repo) OS_REPO="${value}" ;;
+            apps_repo) APPS_REPO="${value}" ;;
+            apps_catalog_url) APPS_CATALOG_URL="${value}" ;;
+        esac
+    done < "${REPOS_CONF}"
+}
+
+normalize() {
+    printf '%s' "$1" | sed 's/^-*//' | tr -d '[]' | tr 'A-Z' 'a-z'
+}
+
+need_root_hint() {
+    [ "$(id -u)" -ne 0 ] && echo "sudo" || true
+}
+
+notify_quiet() {
+    command -v aero-notify >/dev/null 2>&1 && aero-notify "$1" "$2" --app "Aero" || true
+}
+
+sound_quiet() {
+    command -v aero-sound >/dev/null 2>&1 && aero-sound "$1" || true
+}
+
+json_field() {
+    # json_field <key> <file-or-stdin-via-->
+    # Best-effort extract for flat JSON string fields
+    if [ "$2" = "-" ]; then
+        sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" | head -n 1
+    else
+        sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" "$2" | head -n 1
+    fi
+}
+
+# ---- .aero packaging helpers -------------------------------------------------
+
+package_and_install_aero() {
+    # package_and_install_aero <id> <display-name> <kind> <target>
+    # kind: web | pkg-wrapper | pkg | native | local-file
+    app_id="$1"
+    display_name="$2"
+    kind="$3"
+    target="$4"
+
+    staging="$(mktemp -d)"
+    mkdir -p "${staging}"
+
+    case "${kind}" in
+        web)
+            cat > "${staging}/manifest.json" <<MANIFEST
+{
+  "id": "${app_id}",
+  "name": "${display_name}",
+  "version": "1.0.0",
+  "exec": "run.sh",
+  "kind": "web-app"
+}
+MANIFEST
+            cat > "${staging}/run.sh" <<RUNNER
+#!/bin/sh
+exec firefox --new-window "${target}"
+RUNNER
+            ;;
+        pkg|pkg-wrapper)
+            cat > "${staging}/manifest.json" <<MANIFEST
+{
+  "id": "${app_id}",
+  "name": "${display_name}",
+  "version": "1.0.0",
+  "exec": "run.sh",
+  "kind": "pkg-native",
+  "package": "${target}"
+}
+MANIFEST
+            cat > "${staging}/run.sh" <<RUNNER
+#!/bin/sh
+if ! command -v "${target}" >/dev/null 2>&1; then
+    echo "Installing FreeBSD package: ${target}"
+    if [ "\$(id -u)" -eq 0 ]; then pkg install -y "${target}"
+    else sudo pkg install -y "${target}"; fi
+fi
+exec "${target}" "\$@"
+RUNNER
+            echo "Aero: ensuring native package '${target}' is installed…"
+            install_pkg "${target}" || $(need_root_hint) pkg install -y "${target}" 2>/dev/null || true
+            ;;
+        native)
+            cat > "${staging}/manifest.json" <<MANIFEST
+{
+  "id": "${app_id}",
+  "name": "${display_name}",
+  "version": "1.0.0",
+  "exec": "run.sh",
+  "kind": "native-binary"
+}
+MANIFEST
+            cat > "${staging}/run.sh" <<RUNNER
+#!/bin/sh
+exec "${target}" "\$@"
+RUNNER
+            ;;
+        local-file)
+            aero-open --install "${target}"
+            rm -rf "${staging}"
+            return
+            ;;
+        *)
+            rm -rf "${staging}"
+            echo "aero: unknown package kind '${kind}'" >&2
+            return 1
+            ;;
+    esac
+
+    chmod +x "${staging}/run.sh"
+    bundle="${DOWNLOAD_CACHE}/${app_id}.aero"
+    mkdir -p "${DOWNLOAD_CACHE}"
+    tar -cJf "${bundle}" -C "${staging}" .
+    rm -rf "${staging}"
+
+    echo "Aero: installing ${display_name} as ${app_id}.aero…"
+    aero-open --install "${bundle}"
+    notify_quiet "${display_name} installed" "Run it with: aero run ${app_id}"
+    sound_quiet success
+}
+
+install_pkg() {
+    pkg_name="$1"
+    if [ "$(id -u)" -eq 0 ]; then
+        ASSUME_ALWAYS_YES=yes pkg install -y "${pkg_name}"
+    elif command -v sudo >/dev/null 2>&1; then
+        sudo ASSUME_ALWAYS_YES=yes pkg install -y "${pkg_name}"
+    else
+        return 1
+    fi
+}
+
+# Find an app in the local store index by alias or id
+store_find_local() {
+    # store_find_local <query>  -> prints: kind|id|name|target
+    query="$1"
+    index="${STORE_INDEX}"
+    [ -f "${index}" ] || return 1
+
+    # Flatten each app object onto one line, then match the query
+    tr '\n' ' ' < "${index}" | sed 's/},/}\n/g' | while IFS= read -r block; do
+        id="$(printf '%s' "${block}" | sed -n 's/.*"id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
+        name="$(printf '%s' "${block}" | sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
+        kind="$(printf '%s' "${block}" | sed -n 's/.*"kind"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
+        file="$(printf '%s' "${block}" | sed -n 's/.*"file"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
+        package="$(printf '%s' "${block}" | sed -n 's/.*"package"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
+        url="$(printf '%s' "${block}" | sed -n 's/.*"url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
+        source="$(printf '%s' "${block}" | sed -n 's/.*"source"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
+        aliases="$(printf '%s' "${block}" | sed -n 's/.*"aliases"[[:space:]]*:[[:space:]]*\[\([^]]*\)\].*/\1/p')"
+
+        [ -n "${id}" ] || continue
+        id_n="$(normalize "${id}")"
+        name_n="$(normalize "${name}")"
+        aliases_n="$(normalize "${aliases}")"
+
+        matched=0
+        [ "${id_n}" = "${query}" ] && matched=1
+        [ "${name_n}" = "${query}" ] && matched=1
+        printf '%s' "${aliases_n}" | grep -q "\"${query}\"" && matched=1
+        printf '%s' "${aliases_n}" | grep -q "${query}" && matched=1
+
+        [ "${matched}" -eq 1 ] || continue
+
+        if [ "${source}" = "local" ] && [ -n "${file}" ]; then
+            echo "local-file|${id}|${name}|${file}"
+        elif [ "${kind}" = "pkg-wrapper" ] && [ -n "${package}" ]; then
+            echo "pkg-wrapper|${id}|${name}|${package}"
+        elif [ "${kind}" = "web" ] && [ -n "${url}" ]; then
+            echo "web|${id}|${name}|${url}"
+        elif [ -n "${file}" ]; then
+            echo "local-file|${id}|${name}|${file}"
+        else
+            continue
+        fi
+        return 0
+    done
+}
+
+# Download a .aero from the apps GitHub repo latest release assets
+download_aero_from_github() {
+    # download_aero_from_github <app-query> -> path to downloaded .aero or empty
+    query="$1"
+    load_repos_conf
+    case "${APPS_REPO}" in
+        YOUR_GITHUB_USERNAME/*|"") return 1 ;;
+    esac
+
+    echo "Aero: searching GitHub store (${APPS_REPO}) for ${query}.aero…"
+    api="https://api.github.com/repos/${APPS_REPO}/releases/latest"
+    json="$(curl -fsSL -H 'Accept: application/vnd.github+json' "${api}" 2>/dev/null)" || return 1
+
+    # Prefer exact name match like discord.aero or app.discord.aero
+    url="$(printf '%s' "${json}" | tr ',' '\n' | \
+        sed -n 's/.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*\.aero\)".*/\1/p' | \
+        grep -iE "/(${query}|app\\.${query}|dev\\.aero\\.${query})\\.aero$" | head -n 1)"
+
+    [ -n "${url}" ] || \
+        url="$(printf '%s' "${json}" | tr ',' '\n' | \
+            sed -n 's/.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*\.aero\)".*/\1/p' | \
+            grep -i "${query}" | head -n 1)"
+
+    [ -n "${url}" ] || return 1
+
+    mkdir -p "${DOWNLOAD_CACHE}"
+    dest="${DOWNLOAD_CACHE}/$(basename "${url}")"
+    echo "Aero: downloading $(basename "${url}")…"
+    curl -fsSL -o "${dest}" "${url}" || return 1
+    printf '%s' "${dest}"
+}
+
+# Download a native freebsd/linux amd64 binary from a project's latest GitHub release
+download_native_from_github() {
+    query="$1"
+    # Try common org/repo guesses: query/query, query-org/query
+    for repo in "${query}/${query}" "tylerdel30-dev/${query}" "${APPS_REPO%%/*}/${query}"; do
+        api="https://api.github.com/repos/${repo}/releases/latest"
+        json="$(curl -fsSL -H 'Accept: application/vnd.github+json' "${api}" 2>/dev/null)" || continue
+        url="$(printf '%s' "${json}" | tr ',' '\n' | \
+            sed -n 's/.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | \
+            grep -iE 'freebsd|amd64|x86_64|linux' | \
+            grep -viE '\.deb$|\.rpm$|\.dmg$|\.exe$|\.aero$|\.sha|\.sig|\.asc' | \
+            head -n 1)"
+        [ -n "${url}" ] || continue
+        mkdir -p "${DOWNLOAD_CACHE}"
+        dest="${DOWNLOAD_CACHE}/$(basename "${url}")"
+        echo "Aero: downloading native asset from ${repo}…"
+        curl -fsSL -L -o "${dest}" "${url}" || continue
+        # unpack if archive
+        case "${dest}" in
+            *.tar.gz|*.tgz)
+                mkdir -p "${DOWNLOAD_CACHE}/unpack-${query}"
+                tar -xzf "${dest}" -C "${DOWNLOAD_CACHE}/unpack-${query}"
+                bin="$(find "${DOWNLOAD_CACHE}/unpack-${query}" -type f -perm -111 2>/dev/null | head -n 1)"
+                [ -n "${bin}" ] && { printf '%s' "${bin}"; return 0; }
+                ;;
+            *.zip)
+                mkdir -p "${DOWNLOAD_CACHE}/unpack-${query}"
+                unzip -qo "${dest}" -d "${DOWNLOAD_CACHE}/unpack-${query}"
+                bin="$(find "${DOWNLOAD_CACHE}/unpack-${query}" -type f -perm -111 2>/dev/null | head -n 1)"
+                [ -n "${bin}" ] && { printf '%s' "${bin}"; return 0; }
+                ;;
+            *)
+                chmod +x "${dest}" 2>/dev/null || true
+                printf '%s' "${dest}"
+                return 0
+                ;;
+        esac
+    done
+    return 1
+}
+
+# Fallback catalog for wrapping when store index has no entry
+catalog_lookup() {
+    case "$1" in
+        firefox)      echo "pkg-wrapper|app.firefox|Firefox|firefox" ;;
+        chromium|chrome) echo "pkg-wrapper|app.chromium|Chromium|chromium" ;;
+        vlc)          echo "pkg-wrapper|app.vlc|VLC|vlc" ;;
+        gimp)         echo "pkg-wrapper|app.gimp|GIMP|gimp" ;;
+        inkscape)     echo "pkg-wrapper|app.inkscape|Inkscape|inkscape" ;;
+        krita)        echo "pkg-wrapper|app.krita|Krita|krita" ;;
+        libreoffice|office) echo "pkg-wrapper|app.libreoffice|LibreOffice|libreoffice" ;;
+        blender)      echo "pkg-wrapper|app.blender|Blender|blender" ;;
+        obs)          echo "pkg-wrapper|app.obs|OBS-Studio|obs" ;;
+        audacity)     echo "pkg-wrapper|app.audacity|Audacity|audacity" ;;
+        vscode|code)  echo "pkg-wrapper|app.vscode|VS-Code|code" ;;
+        telegram)     echo "pkg-wrapper|app.telegram|Telegram|telegram-desktop" ;;
+        thunderbird)  echo "pkg-wrapper|app.thunderbird|Thunderbird|thunderbird" ;;
+        steam)        echo "pkg-wrapper|app.steam|Steam|steam" ;;
+        mpv)          echo "pkg-wrapper|app.mpv|mpv|mpv" ;;
+        discord)      echo "web|app.discord|Discord|https://discord.com/app" ;;
+        spotify)      echo "web|app.spotify|Spotify|https://open.spotify.com" ;;
+        youtube)      echo "web|app.youtube|YouTube|https://www.youtube.com" ;;
+        netflix)      echo "web|app.netflix|Netflix|https://www.netflix.com" ;;
+        whatsapp)     echo "web|app.whatsapp|WhatsApp|https://web.whatsapp.com" ;;
+        twitch)       echo "web|app.twitch|Twitch|https://www.twitch.tv" ;;
+        gmail)        echo "web|app.gmail|Gmail|https://mail.google.com" ;;
+        outlook)      echo "web|app.outlook|Outlook|https://outlook.live.com" ;;
+        teams)        echo "web|app.teams|Teams|https://teams.microsoft.com" ;;
+        slack)        echo "web|app.slack|Slack|https://app.slack.com/client" ;;
+        github)       echo "web|app.github|GitHub|https://github.com" ;;
+        chatgpt)      echo "web|app.chatgpt|ChatGPT|https://chatgpt.com" ;;
+        canva)        echo "web|app.canva|Canva|https://www.canva.com" ;;
+        figma)        echo "web|app.figma|Figma|https://www.figma.com" ;;
+        tiktok)       echo "web|app.tiktok|TikTok|https://www.tiktok.com" ;;
+        reddit)       echo "web|app.reddit|Reddit|https://www.reddit.com" ;;
+        x|twitter)    echo "web|app.x|X|https://x.com" ;;
+        instagram)    echo "web|app.instagram|Instagram|https://www.instagram.com" ;;
+        roblox)       echo "web|app.roblox|Roblox|https://www.roblox.com" ;;
+        zoom)         echo "web|app.zoom|Zoom|https://zoom.us/join" ;;
+        amazon)       echo "web|app.amazon|Amazon|https://www.amazon.com" ;;
+        hulu)         echo "web|app.hulu|Hulu|https://www.hulu.com" ;;
+        disney|disneyplus) echo "web|app.disney|Disney+|https://www.disneyplus.com" ;;
+        applemusic)   echo "web|app.applemusic|Apple-Music|https://music.apple.com" ;;
+        soundcloud)  echo "web|app.soundcloud|SoundCloud|https://soundcloud.com" ;;
+        pinterest)    echo "web|app.pinterest|Pinterest|https://www.pinterest.com" ;;
+        linkedin)     echo "web|app.linkedin|LinkedIn|https://www.linkedin.com" ;;
+        notion)       echo "web|app.notion|Notion|https://www.notion.so" ;;
+        dropbox)      echo "web|app.dropbox|Dropbox|https://www.dropbox.com" ;;
+        drive|googledrive) echo "web|app.drive|Google-Drive|https://drive.google.com" ;;
+        maps|googlemaps) echo "web|app.maps|Google-Maps|https://maps.google.com" ;;
+        *)            echo "" ;;
+    esac
+}
+
+already_installed() {
+    query="$1"
+    slug="$(printf '%s' "${query}" | tr ' ' '-' | tr -cd 'a-z0-9_-')"
+    [ -d "${APPS_DIR}/${query}" ] && return 0
+    [ -d "${APPS_DIR}/app.${query}" ] && return 0
+    [ -d "${APPS_DIR}/app.${slug}" ] && return 0
+    if [ -d "${APPS_DIR}" ]; then
+        for dir in "${APPS_DIR}"/*/; do
+            [ -f "${dir}manifest.json" ] || continue
+            name="$(json_field name "${dir}manifest.json")"
+            id="$(basename "${dir}")"
+            if [ "$(normalize "${name}")" = "${query}" ] || [ "$(normalize "${id}")" = "${query}" ]; then
+                return 0
+            fi
+        done
+    fi
+    return 1
+}
+
+# Resolve any app name from the public internet into a website URL.
+# Uses free, keyless lookups: Clearbit company suggest + DuckDuckGo Instant Answer.
+resolve_internet_app() {
+    # resolve_internet_app <query>
+    # prints: display_name|https://url   or empty on total failure
+    query="$1"
+    display="$(printf '%s' "${query}" | awk '{
+        for (i=1;i<=NF;i++) {
+            w=$i
+            printf "%s%s", toupper(substr(w,1,1)) substr(w,2), (i<NF ? " " : "")
+        }
+    }')"
+
+    # 1) Clearbit company autocomplete (free, no API key)
+    clearbit="$(curl -fsSL --max-time 8 \
+        "https://autocomplete.clearbit.com/v1/companies/suggest?query=$(printf '%s' "${query}" | sed 's/ /%20/g')" 2>/dev/null || true)"
+    if [ -n "${clearbit}" ]; then
+        domain="$(printf '%s' "${clearbit}" | tr ',' '\n' | \
+            sed -n 's/.*"domain"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
+        cname="$(printf '%s' "${clearbit}" | tr ',' '\n' | \
+            sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
+        if [ -n "${domain}" ]; then
+            [ -n "${cname}" ] && display="${cname}"
+            echo "${display}|https://${domain}"
+            return 0
+        fi
+    fi
+
+    # 2) DuckDuckGo Instant Answer API (free)
+    ddg="$(curl -fsSL --max-time 8 \
+        "https://api.duckduckgo.com/?q=$(printf '%s' "${query}" | sed 's/ /+/g')&format=json&no_redirect=1&no_html=1" 2>/dev/null || true)"
+    if [ -n "${ddg}" ]; then
+        url="$(printf '%s' "${ddg}" | sed -n 's/.*"OfficialWebsite"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
+        [ -n "${url}" ] || url="$(printf '%s' "${ddg}" | sed -n 's/.*"AbstractURL"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
+        [ -n "${url}" ] || url="$(printf '%s' "${ddg}" | sed -n 's/.*"FirstURL"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
+        ddg_name="$(printf '%s' "${ddg}" | sed -n 's/.*"Heading"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
+        if [ -n "${url}" ] && printf '%s' "${url}" | grep -q '^https\{0,1\}://'; then
+            [ -n "${ddg_name}" ] && display="${ddg_name}"
+            echo "${display}|${url}"
+            return 0
+        fi
+    fi
+
+    # 3) Probe common website patterns
+    for candidate in \
+        "https://www.${query}.com" \
+        "https://${query}.com" \
+        "https://www.${query}.io" \
+        "https://${query}.io" \
+        "https://www.${query}.app" \
+        "https://${query}.app" \
+        "https://get${query}.com"
+    do
+        code="$(curl -fsSIL --max-time 5 -o /dev/null -w '%{http_code}' "${candidate}" 2>/dev/null || true)"
+        case "${code}" in
+            200|301|302|303|307|308)
+                echo "${display}|${candidate}"
+                return 0
+                ;;
+        esac
+    done
+
+    # 4) Always succeed: open the web as a searchable app homepage
+    # Uses DuckDuckGo "I'm feeling ducky" redirect to the top result
+    echo "${display}|https://duckduckgo.com/?q=!ducky+$(printf '%s' "${query}" | sed 's/ /+/g')+official+site+app"
+    return 0
+}
+
+cmd_install() {
+    load_repos_conf
+    raw="${1:-}"
+    [ -n "${raw}" ] || { echo "usage: aero install <app>"; exit 1; }
+
+    # Direct URL → wrap as .aero immediately
+    case "${raw}" in
+        http://*|https://*)
+            url="${raw}"
+            slug="$(printf '%s' "${url}" | sed 's|https\{0,1\}://||;s|/.*||;s/^www\.//;s/[^a-zA-Z0-9]/-/g' | tr 'A-Z' 'a-z')"
+            echo "Aero: packaging website as a .aero app…"
+            package_and_install_aero "app.${slug}" "${slug}" "web" "${url}"
+            domain="$(printf '%s' "${url}" | sed 's|https\{0,1\}://||;s|/.*||;s/^www\.//')"
+            command -v aero-fetch-icon >/dev/null 2>&1 && \
+                aero-fetch-icon "app.${slug}" "${domain}" >/dev/null 2>&1 || true
+            return
+            ;;
+    esac
+
+    # Join remaining words: aero install grand theft auto
+    app="$(normalize "${raw}")"
+    if [ "$#" -gt 1 ]; then
+        shift
+        for word in "$@"; do
+            app="${app} $(normalize "${word}")"
+        done
+        app="$(printf '%s' "${app}" | tr -s ' ' | sed 's/^ //;s/ $//')"
+    fi
+
+    if already_installed "${app}"; then
+        echo "Aero: '${app}' is already installed as a .aero app."
+        echo "Run it with: aero run ${app}   (or aero apps to list ids)"
+        return 0
+    fi
+
+    # Single-token slug for ids (spaces → dashes)
+    slug="$(printf '%s' "${app}" | tr ' ' '-' | tr -cd 'a-z0-9_-')"
+    [ -n "${slug}" ] || slug="webapp"
+
+    # 1) Local store index (.aero file or wrap recipe)
+    hit="$(store_find_local "${app}" || true)"
+    [ -n "${hit}" ] || hit="$(store_find_local "${slug}" || true)"
+    if [ -n "${hit}" ]; then
+        kind="$(echo "${hit}" | cut -d'|' -f1)"
+        app_id="$(echo "${hit}" | cut -d'|' -f2)"
+        name="$(echo "${hit}" | cut -d'|' -f3)"
+        target="$(echo "${hit}" | cut -d'|' -f4-)"
+        echo "Aero: found '${name}' in the Aero store"
+        package_and_install_aero "${app_id}" "${name}" "${kind}" "${target}"
+        return
+    fi
+
+    # 2) Download a real .aero from GitHub aero-store Releases
+    downloaded="$(download_aero_from_github "${slug}" || true)"
+    if [ -n "${downloaded}" ] && [ -f "${downloaded}" ]; then
+        echo "Aero: installing downloaded .aero package…"
+        aero-open --install "${downloaded}"
+        notify_quiet "App installed" "Installed from $(basename "${downloaded}")"
+        return
+    fi
+
+    # 3) Built-in wrap catalog → still produces a .aero
+    entry="$(catalog_lookup "${slug}")"
+    [ -n "${entry}" ] || entry="$(catalog_lookup "${app}")"
+    if [ -n "${entry}" ]; then
+        kind="$(echo "${entry}" | cut -d'|' -f1)"
+        app_id="$(echo "${entry}" | cut -d'|' -f2)"
+        name="$(echo "${entry}" | cut -d'|' -f3)"
+        target="$(echo "${entry}" | cut -d'|' -f4-)"
+        echo "Aero: packaging '${name}' as a .aero app…"
+        package_and_install_aero "${app_id}" "${name}" "${kind}" "${target}"
+        return
+    fi
+
+    # 4) FreeBSD package match → install NATIVE package, then wrap launcher as .aero
+    if pkg search -q "${slug}" >/dev/null 2>&1; then
+        best="$(pkg search -q "${slug}" 2>/dev/null | head -n 1 | sed 's/-[0-9].*$//')"
+        if [ -n "${best}" ]; then
+            echo "Aero: installing native FreeBSD package '${best}'…"
+            install_pkg "${best}" || true
+            echo "Aero: packaging launcher for '${best}' as a .aero app…"
+            package_and_install_aero "app.${slug}" "${best}" "pkg" "${best}"
+            return
+        fi
+    fi
+
+    # 4b) GitHub release binary (linux/freebsd amd64 asset) — prefer real downloads
+    gh_bin="$(download_native_from_github "${slug}" || true)"
+    if [ -n "${gh_bin}" ] && [ -f "${gh_bin}" ]; then
+        echo "Aero: installing native binary from GitHub → ${gh_bin}"
+        mkdir -p "${HOME}/.local/bin"
+        install -m 0755 "${gh_bin}" "${HOME}/.local/bin/$(basename "${gh_bin}")"
+        package_and_install_aero "app.${slug}" "${slug}" "native" "${HOME}/.local/bin/$(basename "${gh_bin}")"
+        return
+    fi
+
+    # 5) Resolve ANY other app from the internet → .aero web wrapper (last resort)
+    echo "Aero: looking up '${app}' on the internet…"
+    resolved="$(resolve_internet_app "${app}" || true)"
+    if [ -n "${resolved}" ]; then
+        name="$(echo "${resolved}" | cut -d'|' -f1)"
+        url="$(echo "${resolved}" | cut -d'|' -f2-)"
+        echo "Aero: found ${name} → ${url}"
+        echo "Aero: packaging as a .aero web app (no native package found)…"
+        package_and_install_aero "app.${slug}" "${name}" "web" "${url}"
+        domain="$(printf '%s' "${url}" | sed 's|https\{0,1\}://||;s|/.*||;s/^www\.//')"
+        if command -v aero-fetch-icon >/dev/null 2>&1 && [ -n "${domain}" ]; then
+            aero-fetch-icon "app.${slug}" "${domain}" >/dev/null 2>&1 || true
+        fi
+        return
+    fi
+
+    echo "Aero: could not resolve '${app}'."
+    exit 1
+}
+
+cmd_remove() {
+    app="$(normalize "${1:-}")"
+    [ -n "${app}" ] || { echo "usage: aero remove <app>"; exit 1; }
+
+    for candidate in "${app}" "app.${app}" "dev.aero.${app}"; do
+        if [ -d "${APPS_DIR}/${candidate}" ]; then
+            rm -rf "${APPS_DIR:?}/${candidate}"
+            echo "Removed ${candidate} (.aero app)"
+            return 0
+        fi
+    done
+
+    if [ -d "${APPS_DIR}" ]; then
+        for dir in "${APPS_DIR}"/*/; do
+            [ -f "${dir}manifest.json" ] || continue
+            name="$(normalize "$(json_field name "${dir}manifest.json")")"
+            if [ "${name}" = "${app}" ]; then
+                rm -rf "${dir}"
+                echo "Removed $(basename "${dir}") (.aero app)"
+                return 0
+            fi
+        done
+    fi
+
+    echo "Aero: no installed .aero app named '${app}'"
+    exit 1
+}
+
+cmd_search() {
+    load_repos_conf
+    term="$(normalize "${1:-}")"
+    [ -n "${term}" ] || { echo "usage: aero search <name>"; exit 1; }
+
+    echo "== Aero store (local) =="
+    if [ -f "${STORE_INDEX}" ]; then
+        grep -i "\"name\"\\|\"aliases\"" "${STORE_INDEX}" | \
+            sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/  \1/p'
+        grep -oiE "\"[a-z0-9.-]*${term}[a-z0-9.-]*\"" "${STORE_INDEX}" 2>/dev/null | \
+            tr -d '"' | sort -u | sed 's/^/  /' | head -n 20
+    else
+        echo "  (no local store index)"
+    fi
+
+    echo "== Aero store (GitHub) =="
+    case "${APPS_REPO}" in
+        YOUR_GITHUB_USERNAME/*|"")
+            echo "  (set apps_repo in /etc/aero/repos.conf)"
+            ;;
+        *)
+            curl -fsSL -H 'Accept: application/vnd.github+json' \
+                "https://api.github.com/repos/${APPS_REPO}/releases/latest" 2>/dev/null | \
+                tr ',' '\n' | sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\.aero\)".*/  \1/p' | \
+                grep -i "${term}" | head -n 12 || echo "  (no matching .aero releases)"
+            ;;
+    esac
+
+    echo "== Package repository =="
+    pkg search "${term}" 2>/dev/null | head -n 12 || echo "  (repository unavailable)"
+
+    echo "== Internet lookup =="
+    resolved="$(resolve_internet_app "${term}" 2>/dev/null || true)"
+    if [ -n "${resolved}" ]; then
+        name="$(echo "${resolved}" | cut -d'|' -f1)"
+        url="$(echo "${resolved}" | cut -d'|' -f2-)"
+        echo "  ${name}"
+        echo "  ${url}"
+        echo "  Install with: aero install ${term}"
+    else
+        echo "  (offline or no match)"
+    fi
+}
+
+cmd_web() {
+    name="$(normalize "${1:-}")"
+    url="${2:-}"
+    [ -n "${name}" ] && [ -n "${url}" ] || { echo "usage: aero web <name> <url>"; exit 1; }
+    package_and_install_aero "app.${name}" "${name}" "web" "${url}"
+}
+
+cmd_apps() {
+    command -v aero-open >/dev/null 2>&1 && aero-open --list || true
+}
+
+cmd_run() {
+    target="${1:-}"
+    [ -n "${target}" ] || { echo "usage: aero run <app|file>"; exit 1; }
+    shift
+    # Prefer installed .aero id variants
+    for candidate in "${target}" "app.$(normalize "${target}")" "dev.aero.$(normalize "${target}")"; do
+        if [ -d "${APPS_DIR}/${candidate}" ]; then
+            exec aero-open "${candidate}" "$@"
+        fi
+    done
+    exec aero-open "${target}" "$@"
+}
+
+cmd_store() {
+    exec aero-store
+}
+
+# ---- system ------------------------------------------------------------------
+
+cmd_update() {
+    load_repos_conf
+    local_version="$(cat "${AERO_VERSION_FILE}" 2>/dev/null || echo 0.0.0)"
+    echo "Local version:  ${local_version}"
+    echo "Update repo:    ${OS_REPO}"
+
+    case "${OS_REPO}" in
+        YOUR_GITHUB_USERNAME/*|"")
+            echo "Set os_repo in /etc/aero/repos.conf to your GitHub repo, e.g. tyler/aero-os"
+            exit 1
+            ;;
+    esac
+
+    latest="$(curl -fsSL -H 'Accept: application/vnd.github+json' \
+        "https://api.github.com/repos/${OS_REPO}/releases/latest" | \
+        sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"v\{0,1\}\([^"]*\)".*/\1/p' | head -n 1)"
+    [ -n "${latest}" ] || { echo "Could not reach ${OS_REPO} — create a Release on GitHub first."; exit 1; }
+    echo "Latest release: ${latest}"
+    if [ "${latest}" = "${local_version}" ]; then
+        echo "Aero OS is up to date."
+    else
+        echo "Update available — run: aero upgrade"
+        echo "Your files in /home will not be touched."
+        notify_quiet "Update available" "Aero OS ${latest} is ready — run: aero upgrade"
+    fi
+}
+
+cmd_upgrade() {
+    load_repos_conf
+    case "${OS_REPO}" in
+        YOUR_GITHUB_USERNAME/*|"")
+            echo "Set os_repo in /etc/aero/repos.conf first (e.g. yourname/aero-os)"
+            exit 1
+            ;;
+    esac
+
+    local_version="$(cat "${AERO_VERSION_FILE}" 2>/dev/null || echo 0.0.0)"
+    progress_file="/tmp/aero-update-progress"
+    done_file="/tmp/aero-update-done"
+
+    write_progress() {
+        # write_progress <percent> <message>
+        printf 'percent=%s\nmessage=%s\n' "$1" "$2" > "${progress_file}"
+    }
+
+    finish_progress() {
+        printf 'percent=100\nmessage=%s\ndone\n' "$1" > "${progress_file}"
+        echo done > "${done_file}"
+    }
+
+    rm -f "${done_file}"
+    write_progress 0 "Preparing update…"
+
+    # Boot-screen style overlay with loading bar
+    if command -v aero-update-ui >/dev/null 2>&1; then
+        echo "Aero: opening update screen…"
+        aero-update-ui >/dev/null 2>&1 &
+        UPDATE_UI_PID=$!
+        sleep 0.4
+    else
+        UPDATE_UI_PID=""
+    fi
+
+    echo "Aero: upgrading from ${local_version} via ${OS_REPO}"
+    echo "Protected paths (never overwritten): /home  /root  ~/.config/aero  ~/.local/share/aero"
+
+    write_progress 8 "Connecting to update server…"
+    mkdir -p "${DOWNLOAD_CACHE}"
+    api="https://api.github.com/repos/${OS_REPO}/releases/latest"
+    json="$(curl -fsSL -H 'Accept: application/vnd.github+json' "${api}")" || {
+        write_progress 0 "Could not reach update server"
+        finish_progress "Update failed — could not reach server"
+        echo "Could not fetch release metadata."
+        exit 1
+    }
+
+    write_progress 18 "Reading release information…"
+    latest="$(printf '%s' "${json}" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"v\{0,1\}\([^"]*\)".*/\1/p' | head -n 1)"
+    [ -n "${latest}" ] || {
+        finish_progress "Update failed — no release tag found"
+        echo "No release tag on ${OS_REPO}."
+        exit 1
+    }
+
+    if [ "${latest}" = "${local_version}" ]; then
+        write_progress 100 "Already up to date (${latest})"
+        finish_progress "Already up to date"
+        echo "Aero OS ${latest} is already installed."
+        [ -n "${UPDATE_UI_PID}" ] && wait "${UPDATE_UI_PID}" 2>/dev/null || true
+        return 0
+    fi
+
+    echo "Aero: ${local_version} → ${latest}"
+    manifest_url="$(printf '%s' "${json}" | tr ',' '\n' | \
+        sed -n 's/.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*aero-update-manifest\.json\)".*/\1/p' | head -n 1)"
+
+    if [ -n "${manifest_url}" ]; then
+        write_progress 28 "Downloading update manifest…"
+        echo "Aero: downloading update manifest…"
+        curl -fsSL -o "${DOWNLOAD_CACHE}/aero-update-manifest.json" "${manifest_url}"
+        write_progress 40 "Installing system files…"
+        echo "Aero: applying system-only file replacements from manifest…"
+        step=40
+        while IFS= read -r path; do
+            [ -n "${path}" ] || continue
+            base="$(basename "${path}")"
+            asset_url="$(printf '%s' "${json}" | tr ',' '\n' | \
+                sed -n "s/.*\"browser_download_url\"[[:space:]]*:[[:space:]]*\"\\([^\"]*${base}\\)\".*/\\1/p" | head -n 1)"
+            if [ -n "${asset_url}" ]; then
+                tmp="${DOWNLOAD_CACHE}/${base}"
+                write_progress "${step}" "Updating ${base}…"
+                curl -fsSL -o "${tmp}" "${asset_url}" && \
+                    $(need_root_hint) install -m 0755 "${tmp}" "${path}" && \
+                    echo "  updated ${path}"
+                step=$((step + 5))
+                [ "${step}" -gt 75 ] && step=75
+            fi
+        done <<PATHS
+/usr/local/bin/aero-shell
+/usr/local/bin/aero-settings
+/usr/local/bin/aero-lock
+/usr/local/bin/aero-firstboot
+/usr/local/bin/aero-update-ui
+/usr/local/bin/aero
+/usr/local/bin/aero-open
+/usr/local/bin/aexes
+/usr/local/bin/aero-notify
+/usr/local/share/aero/style.css
+PATHS
+    else
+        write_progress 45 "No manifest — syncing packages…"
+    fi
+
+    write_progress 80 "Syncing system packages…"
+    echo "Aero: syncing FreeBSD packages (system zone only)…"
+    $(need_root_hint) pkg upgrade -y
+
+    write_progress 92 "Finalizing version ${latest}…"
+    echo "${latest}" | $(need_root_hint) tee "${AERO_VERSION_FILE}" >/dev/null
+
+    write_progress 100 "Update complete"
+    finish_progress "Update complete — restart when ready"
+    notify_quiet "Update installed" "Restart to finish updating Aero OS ${latest}"
+    echo "Done. Restart when ready — your apps and files in /home are intact."
+
+    # Give the update screen a moment to show 100%, then it closes itself
+    if [ -n "${UPDATE_UI_PID}" ]; then
+        wait "${UPDATE_UI_PID}" 2>/dev/null || true
+    fi
+}
+
+cmd_cleanup() {
+    echo "Aero: removing orphaned packages and caches…"
+    $(need_root_hint) pkg autoremove -y
+    $(need_root_hint) pkg clean -y
+    rm -rf "${HOME}/.cache/aero/run" 2>/dev/null || true
+    echo "Cleanup complete."
+}
+
+cmd_services() {
+    service -e 2>/dev/null | sed 's|.*/||'
+}
+
+cmd_service() {
+    svc="$(normalize "${1:-}")"
+    action="$(normalize "${2:-}")"
+    [ -n "${svc}" ] && [ -n "${action}" ] || { echo "usage: aero service <name> <start|stop|restart>"; exit 1; }
+    case "${action}" in
+        start|stop|restart|status) $(need_root_hint) service "${svc}" "${action}" ;;
+        *) echo "usage: aero service <name> <start|stop|restart|status>"; exit 1 ;;
+    esac
+}
+
+cmd_info() {
+    if [ -f "${AERO_RELEASE_FILE}" ]; then
+        cat "${AERO_RELEASE_FILE}"
+    else
+        echo "Aero OS $(cat "${AERO_VERSION_FILE}" 2>/dev/null || echo '(unknown)')"
+    fi
+    echo "Unix foundation : $(uname -sr)"
+    echo "Architecture    : $(uname -m)"
+    echo "Hostname        : $(hostname)"
+    echo "Uptime          :$(uptime | sed 's/.*up/ up/;s/,.*//')"
+    echo "Memory          : $(sysctl -n hw.physmem 2>/dev/null | awk '{ printf "%.1f GB", $1 / 1073741824 }')"
+    echo "Desktop         : Aero shell (Wayland / labwc)"
+}
+
+cmd_doctor() {
+    echo "Aero OS health check"
+    for tool in aero-open aexes aero-notify aero-sound aero-windows aero-lock aero-settings aero-shell labwc; do
+        command -v "${tool}" >/dev/null 2>&1 && echo "  ${tool}: OK" || echo "  ${tool}: MISSING"
+    done
+    [ -d /usr/local/share/aero/sounds ] && echo "  sound scheme: OK" || echo "  sound scheme: MISSING"
+    [ -x /usr/local/sbin/aero-bootstrap ] && echo "  bootstrap: OK" || echo "  bootstrap: MISSING"
+    [ -x /usr/local/sbin/aero-build-desktop ] && echo "  build-desktop: OK" || echo "  build-desktop: MISSING"
+    [ -f "${AERO_VERSION_FILE}" ] && echo "  version file: OK ($(cat "${AERO_VERSION_FILE}" 2>/dev/null))" || echo "  version file: MISSING"
+    ping -c 1 -t 3 8.8.8.8 >/dev/null 2>&1 && echo "  network: OK" || echo "  network: OFFLINE"
+    if command -v aero-ota-prove >/dev/null 2>&1; then
+        echo "  --- OTA ---"
+        aero-ota-prove 2>/dev/null | sed 's/^/  /' || true
+    fi
+}
+
+cmd_version() {
+    echo "Aero OS $(cat "${AERO_VERSION_FILE}" 2>/dev/null || echo '(unknown)')"
+}
+
+# ---- desktop -----------------------------------------------------------------
+
+cmd_appearance() {
+    mode="$(normalize "${1:-}")"
+    case "${mode}" in
+        light|dark|night)
+            mkdir -p "${CONFIG_DIR}"
+            grep -v '^appearance=' "${CONFIG_DIR}/display.conf" 2>/dev/null > "${CONFIG_DIR}/display.conf.tmp" || true
+            echo "appearance=${mode}" >> "${CONFIG_DIR}/display.conf.tmp"
+            mv "${CONFIG_DIR}/display.conf.tmp" "${CONFIG_DIR}/display.conf"
+            echo "Appearance set to ${mode}."
+            ;;
+        *) echo "usage: aero appearance <light|dark|night>"; exit 1 ;;
+    esac
+}
+
+cmd_wallpaper() {
+    file="${1:-}"
+    mode="$(normalize "${2:-dark}")"
+    [ -f "${file}" ] || { echo "usage: aero wallpaper <image.png> <light|dark|night>"; exit 1; }
+    case "${mode}" in light|dark|night) ;; *) echo "mode must be light, dark, or night"; exit 1 ;; esac
+    $(need_root_hint) cp "${file}" "/usr/local/share/aero/wallpapers/${mode}.png"
+    echo "Wallpaper for ${mode} mode replaced — switch to it with: aero appearance ${mode}"
+}
+
+cmd_screenshot() {
+    pictures="${HOME}/Pictures"
+    mkdir -p "${pictures}"
+    file="${pictures}/screenshot-$(date +%Y%m%d-%H%M%S).png"
+    command -v grim >/dev/null 2>&1 || { echo "grim is not installed"; exit 1; }
+    grim "${file}" && echo "Saved ${file}"
+    notify_quiet "Screenshot captured" "${file}"
+}
+
+cmd_notify() {
+    exec aero-notify "${1:-Notification}" "${2:-}" --app "Aero"
+}
+
+cmd_lock() {
+    exec aero-lock
+}
+
+# ---- hardware ------------------------------------------------------------------
+
+cmd_volume() {
+    value="$(normalize "${1:-}")"
+    case "${value}" in
+        up)   wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+ ;;
+        down) wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%- ;;
+        mute) wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle ;;
+        [0-9]|[0-9][0-9]|100) wpctl set-volume @DEFAULT_AUDIO_SINK@ "${value}%" ;;
+        *) echo "usage: aero volume <up|down|mute|0-100>"; exit 1 ;;
+    esac
+}
+
+cmd_brightness() {
+    value="$(normalize "${1:-}")"
+    current="$(sysctl -n hw.acpi.video.lcd0.brightness 2>/dev/null || echo 50)"
+    case "${value}" in
+        up)   target=$((current + 10)) ;;
+        down) target=$((current - 10)) ;;
+        [1-9][0-9]|100|10) target="${value}" ;;
+        *) echo "usage: aero brightness <up|down|10-100>"; exit 1 ;;
+    esac
+    [ "${target}" -gt 100 ] && target=100
+    [ "${target}" -lt 10 ] && target=10
+    $(need_root_hint) sysctl "hw.acpi.video.lcd0.brightness=${target}" >/dev/null 2>&1 && \
+        echo "Brightness: ${target}%" || echo "Brightness control not available on this hardware"
+}
+
+cmd_wifi() {
+    action="$(normalize "${1:-status}")"
+    case "${action}" in
+        list)   $(need_root_hint) ifconfig wlan0 scan 2>/dev/null | head -n 15 || echo "No wireless interface" ;;
+        status) ifconfig wlan0 2>/dev/null | grep -E 'ssid|status' || echo "No wireless interface" ;;
+        *) echo "usage: aero wifi <list|status>"; exit 1 ;;
+    esac
+}
+
+cmd_battery() {
+    percent="$(apm -l 2>/dev/null || echo 255)"
+    if [ "${percent}" = "255" ]; then
+        echo "No battery detected (desktop or VM)"
+    else
+        echo "Battery: ${percent}%"
+        apm -a 2>/dev/null | grep -q 1 && echo "Status: charging" || echo "Status: on battery"
+    fi
+}
+
+# ---- files ---------------------------------------------------------------------
+
+cmd_trash() {
+    [ $# -ge 1 ] || { echo "usage: aero trash <file...>"; exit 1; }
+    mkdir -p "${TRASH_DIR}"
+    for file in "$@"; do
+        [ -e "${file}" ] || { echo "skip: ${file} (not found)"; continue; }
+        mv "${file}" "${TRASH_DIR}/$(date +%s)-$(basename "${file}")"
+        echo "Trashed ${file}"
+    done
+}
+
+cmd_trash_empty() {
+    rm -rf "${TRASH_DIR:?}"
+    mkdir -p "${TRASH_DIR}"
+    echo "Trash emptied."
+}
+
+cmd_backup() {
+    backups="${HOME}/Backups"
+    mkdir -p "${backups}"
+    file="${backups}/aero-home-$(date +%Y%m%d-%H%M%S).tar.gz"
+    echo "Aero: backing up your home folder (excluding caches)…"
+    tar -czf "${file}" \
+        --exclude "${HOME}/.cache" \
+        --exclude "${HOME}/Backups" \
+        -C "${HOME}" . 2>/dev/null || true
+    echo "Backup saved: ${file}"
+    notify_quiet "Backup complete" "${file}"
+}
+
+cmd_help() {
+    sed -n '3,45p' "$0" | sed 's/^# \{0,1\}//'
+}
+
+command_word="$(normalize "${1:-help}")"
+[ $# -gt 0 ] && shift
+
+case "${command_word}" in
+    install|add)              cmd_install "$@" ;;
+    remove|uninstall|delete)  cmd_remove "$@" ;;
+    search|find)              cmd_search "$@" ;;
+    web|webapp)               cmd_web "$@" ;;
+    apps|list)                cmd_apps "$@" ;;
+    run|open|launch)          cmd_run "$@" ;;
+    store|appstore)           cmd_store "$@" ;;
+    update|check)             cmd_update "$@" ;;
+    upgrade)                  cmd_upgrade "$@" ;;
+    cleanup|clean)            cmd_cleanup "$@" ;;
+    services)                 cmd_services "$@" ;;
+    service)                  cmd_service "$@" ;;
+    appearance|theme)         cmd_appearance "$@" ;;
+    wallpaper)                cmd_wallpaper "$@" ;;
+    screenshot|shot)          cmd_screenshot "$@" ;;
+    notify)                   cmd_notify "$@" ;;
+    lock)                     cmd_lock "$@" ;;
+    volume|vol)               cmd_volume "$@" ;;
+    brightness|bright)        cmd_brightness "$@" ;;
+    wifi)                     cmd_wifi "$@" ;;
+    battery|power)            cmd_battery "$@" ;;
+    trash)                    cmd_trash "$@" ;;
+    trashempty|trash-empty)   cmd_trash_empty "$@" ;;
+    backup)                   cmd_backup "$@" ;;
+    info|about)               cmd_info "$@" ;;
+    doctor|health)            cmd_doctor "$@" ;;
+    version)                  cmd_version "$@" ;;
+    help|*)                   cmd_help ;;
+esac

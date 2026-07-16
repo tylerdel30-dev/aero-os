@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Aero OS window management configuration (labwc) -->
+<labwc_config>
+  <core>
+    <decoration>server</decoration>
+    <gap>6</gap>
+  </core>
+
+  <desktops number="4">
+    <names>
+      <name>Main</name>
+      <name>Work</name>
+      <name>Media</name>
+      <name>Extra</name>
+    </names>
+  </desktops>
+
+  <theme>
+    <name>Aero</name>
+    <cornerRadius>10</cornerRadius>
+    <font name="Inter" size="11"/>
+  </theme>
+
+  <keyboard>
+    <!-- Window switching, macOS/Windows hybrid shortcuts -->
+    <keybind key="A-Tab">
+      <action name="NextWindow"/>
+    </keybind>
+    <keybind key="A-S-Tab">
+      <action name="PreviousWindow"/>
+    </keybind>
+
+    <!-- Snapping -->
+    <keybind key="W-Left">
+      <action name="SnapToEdge" direction="left"/>
+    </keybind>
+    <keybind key="W-Right">
+      <action name="SnapToEdge" direction="right"/>
+    </keybind>
+    <keybind key="W-Up">
+      <action name="ToggleMaximize"/>
+    </keybind>
+    <keybind key="W-Down">
+      <action name="Iconify"/>
+    </keybind>
+
+    <!-- App shortcuts -->
+    <keybind key="W-Return">
+      <action name="Execute" command="foot"/>
+    </keybind>
+    <keybind key="W-e">
+      <action name="Execute" command="thunar"/>
+    </keybind>
+    <keybind key="W-i">
+      <action name="Execute" command="aero-settings"/>
+    </keybind>
+    <keybind key="W-s">
+      <action name="Execute" command="aero-store"/>
+    </keybind>
+    <keybind key="W-l">
+      <action name="Execute" command="aero-lock"/>
+    </keybind>
+    <keybind key="Print">
+      <action name="Execute" command="aero screenshot"/>
+    </keybind>
+
+    <keybind key="W-q">
+      <action name="Close"/>
+    </keybind>
+
+    <!-- Workspaces -->
+    <keybind key="W-1">
+      <action name="GoToDesktop" to="1"/>
+    </keybind>
+    <keybind key="W-2">
+      <action name="GoToDesktop" to="2"/>
+    </keybind>
+    <keybind key="W-3">
+      <action name="GoToDesktop" to="3"/>
+    </keybind>
+    <keybind key="W-4">
+      <action name="GoToDesktop" to="4"/>
+    </keybind>
+    <keybind key="W-S-1">
+      <action name="SendToDesktop" to="1"/>
+    </keybind>
+    <keybind key="W-S-2">
+      <action name="SendToDesktop" to="2"/>
+    </keybind>
+    <keybind key="W-S-3">
+      <action name="SendToDesktop" to="3"/>
+    </keybind>
+    <keybind key="W-S-4">
+      <action name="SendToDesktop" to="4"/>
+    </keybind>
+    <keybind key="W-d">
+      <action name="ToggleShowDesktop"/>
+    </keybind>
+  </keyboard>
+
+  <mouse>
+    <context name="Titlebar">
+      <mousebind button="Left" action="Drag">
+        <action name="Move"/>
+      </mousebind>
+      <mousebind button="Left" action="DoubleClick">
+        <action name="ToggleMaximize"/>
+      </mousebind>
+    </context>
+  </mouse>
+
+  <windowRules>
+    <!-- The Aero shell manages its own layer-shell surfaces -->
+  </windowRules>
+</labwc_config>

@@ -1,0 +1,25 @@
+{
+  "providers": [
+    {
+      "id": "microsoft",
+      "name": "Microsoft Account",
+      "authURL": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=AERO_CLIENT_ID&response_type=code&redirect_uri=aero%3A%2F%2Fauth%2Fmicrosoft&scope=openid%20profile%20email",
+      "redirectScheme": "aero://auth/microsoft",
+      "tokenEndpoint": "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+    },
+    {
+      "id": "apple",
+      "name": "Apple ID",
+      "authURL": "https://appleid.apple.com/auth/authorize?client_id=AERO_APPLE_ID&response_type=code&redirect_uri=aero%3A%2F%2Fauth%2Fapple&scope=name%20email",
+      "redirectScheme": "aero://auth/apple",
+      "tokenEndpoint": "https://appleid.apple.com/auth/token"
+    },
+    {
+      "id": "aero",
+      "name": "Aero Account",
+      "authURL": "https://accounts.aero-os.dev/oauth/authorize?client_id=AERO_NATIVE&response_type=code&redirect_uri=aero%3A%2F%2Fauth%2Faero&scope=profile",
+      "redirectScheme": "aero://auth/aero",
+      "tokenEndpoint": "https://accounts.aero-os.dev/oauth/token"
+    }
+  ]
+}

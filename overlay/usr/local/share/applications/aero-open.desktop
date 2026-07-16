@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Aero App Launcher
+Comment=Run Aero OS app bundles and Windows programs
+Exec=aero-open %f
+Icon=/usr/local/share/aero/aero-logo.png
+Terminal=false
+NoDisplay=true
+MimeType=application/x-aero-app;application/x-ms-dos-executable;application/vnd.microsoft.portable-executable;
+Categories=System;

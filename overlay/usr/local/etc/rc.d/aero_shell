@@ -1,0 +1,36 @@
+#!/bin/sh
+#
+# Aero OS desktop shell — rc.d service (FreeBSD Unix init)
+
+. /etc/rc.subr
+
+name="aero_shell"
+rcvar="aero_shell_enable"
+command="/usr/local/bin/aero-shell"
+pidfile="/var/run/aero-shell.pid"
+start_cmd="aero_shell_start"
+stop_cmd="aero_shell_stop"
+
+aero_shell_start()
+{
+    if [ -z "${WAYLAND_DISPLAY}" ]; then
+        export WAYLAND_DISPLAY=wayland-0
+    fi
+    if [ -z "${XDG_RUNTIME_DIR}" ]; then
+        export XDG_RUNTIME_DIR="/tmp/runtime-$(id -u)"
+        mkdir -p "${XDG_RUNTIME_DIR}"
+        chmod 700 "${XDG_RUNTIME_DIR}"
+    fi
+    /usr/sbin/daemon -p "${pidfile}" -r -P "${pidfile}" -f "${command}"
+}
+
+aero_shell_stop()
+{
+    if [ -f "${pidfile}" ]; then
+        kill "$(cat "${pidfile}")" 2>/dev/null || true
+        rm -f "${pidfile}"
+    fi
+}
+
+load_rc_config "${name}"
+run_rc_command "$1"

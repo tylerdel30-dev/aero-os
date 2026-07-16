@@ -1,0 +1,22 @@
+# Aero OS first session — ensure desktop stack exists, then start shell
+
+# Offline/network package + compile if desktop binaries missing
+if [ ! -x /usr/local/bin/aero-shell ]; then
+    /usr/local/sbin/aero-bootstrap / >/tmp/aero-bootstrap.log 2>&1 || true
+fi
+if [ ! -x /usr/local/bin/aero-shell ] && command -v swiftc >/dev/null 2>&1; then
+    /usr/local/sbin/aero-build-desktop >/tmp/aero-build.log 2>&1 || true
+fi
+
+# Desktop shell: wallpaper, top bar, dock, start menu, notifications
+if [ -x /usr/local/bin/aero-shell ]; then
+    /usr/local/bin/aero-shell &
+else
+    # Temporary foot so the session is usable while compile finishes
+    command -v foot >/dev/null 2>&1 && foot -e sh -c 'echo Aero shell not built yet; echo Run: aero-bootstrap; echo Then: aero-build-desktop; exec sh' &
+fi
+
+# One-time first-boot experience
+if [ -x /usr/local/bin/aero-firstboot ]; then
+    /usr/local/bin/aero-firstboot &
+fi

@@ -1,0 +1,20 @@
+{
+  "name": "Aero Chill Glass",
+  "version": "1.0.1",
+  "description": "Soft glassy UI sounds — warm pads, quiet chimes, never harsh. Matches Aero's translucent desktop.",
+  "events": {
+    "startup": "startup.wav",
+    "shutdown": "shutdown.wav",
+    "notification": "notification.wav",
+    "message": "message.wav",
+    "click": "click.wav",
+    "hover": "hover.wav",
+    "success": "success.wav",
+    "error": "error.wav",
+    "lock": "lock.wav",
+    "unlock": "unlock.wav",
+    "volume": "volume.wav"
+  },
+  "default_volume": 0.55,
+  "style": "chill"
+}

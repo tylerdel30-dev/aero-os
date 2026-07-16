@@ -1,0 +1,31 @@
+#!/bin/sh
+#
+# Aero Settings — rc.d service
+
+. /etc/rc.subr
+
+name="aero_settings"
+rcvar="aero_settings_enable"
+command="/usr/local/bin/aero-settings"
+pidfile="/var/run/aero-settings.pid"
+start_cmd="aero_settings_start"
+stop_cmd="aero_settings_stop"
+
+aero_settings_start()
+{
+    export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/runtime-$(id -u)}"
+    mkdir -p "${XDG_RUNTIME_DIR}"
+    chmod 700 "${XDG_RUNTIME_DIR}"
+    /usr/sbin/daemon -p "${pidfile}" -r -P "${pidfile}" -f "${command}"
+}
+
+aero_settings_stop()
+{
+    if [ -f "${pidfile}" ]; then
+        kill "$(cat "${pidfile}")" 2>/dev/null || true
+        rm -f "${pidfile}"
+    fi
+}
+
+load_rc_config "${name}"
+run_rc_command "$1"

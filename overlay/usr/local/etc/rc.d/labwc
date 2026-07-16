@@ -1,0 +1,37 @@
+#!/bin/sh
+#
+# labwc Wayland compositor — window management engine for Aero OS
+# Provides Alt-Tab switching, window decorations, snapping, and workspaces.
+
+# PROVIDE: labwc
+# REQUIRE: DAEMON dbus
+# KEYWORD: shutdown
+
+. /etc/rc.subr
+
+name="labwc"
+rcvar="labwc_enable"
+command="/usr/local/bin/labwc"
+pidfile="/var/run/labwc.pid"
+start_cmd="labwc_start"
+stop_cmd="labwc_stop"
+
+labwc_start()
+{
+    export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/runtime-$(id -u)}"
+    mkdir -p "${XDG_RUNTIME_DIR}"
+    chmod 700 "${XDG_RUNTIME_DIR}"
+    export XDG_CONFIG_DIRS="/etc/xdg:/usr/local/etc/xdg"
+    /usr/sbin/daemon -p "${pidfile}" -r -f "${command}" -C /etc/xdg/labwc
+}
+
+labwc_stop()
+{
+    if [ -f "${pidfile}" ]; then
+        kill "$(cat "${pidfile}")" 2>/dev/null || true
+        rm -f "${pidfile}"
+    fi
+}
+
+load_rc_config "${name}"
+run_rc_command "$1"

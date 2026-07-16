@@ -1,0 +1,21 @@
+#!/bin/sh
+set -e
+
+INSTALLER_CONF="/usr/local/etc/bsdinstall/aero/installer.conf"
+PARTITION_CONF="/usr/local/etc/bsdinstall/aero/partition.conf"
+
+export AERO_INSTALLER_CONF="${INSTALLER_CONF}"
+export AERO_PARTITION_CONF="${PARTITION_CONF}"
+export BSDINSTALL=config
+
+if [ ! -f "${INSTALLER_CONF}" ]; then
+    echo "Aero OS installer configuration missing at ${INSTALLER_CONF}" >&2
+    exit 1
+fi
+
+if [ ! -f "${PARTITION_CONF}" ]; then
+    echo "Aero OS partition configuration missing at ${PARTITION_CONF}" >&2
+    exit 1
+fi
+
+exec /usr/sbin/bsdinstall

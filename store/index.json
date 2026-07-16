@@ -1,0 +1,238 @@
+{
+  "store_version": 1,
+  "name": "Aero App Store",
+  "updated": "2026-07-15",
+  "apps": [
+    {
+      "id": "app.firefox",
+      "name": "Firefox",
+      "aliases": ["firefox"],
+      "version": "1.0.0",
+      "description": "Fast, private web browser",
+      "category": "Internet",
+      "kind": "pkg-wrapper",
+      "package": "firefox",
+      "icon_domain": "mozilla.org"
+    },
+    {
+      "id": "app.chromium",
+      "name": "Chromium",
+      "aliases": ["chromium", "chrome"],
+      "version": "1.0.0",
+      "description": "Open-source Chrome browser",
+      "category": "Internet",
+      "kind": "pkg-wrapper",
+      "package": "chromium",
+      "icon_domain": "google.com"
+    },
+    {
+      "id": "app.discord",
+      "name": "Discord",
+      "aliases": ["discord"],
+      "version": "1.0.0",
+      "description": "Chat, voice, and communities",
+      "category": "Social",
+      "kind": "web",
+      "url": "https://discord.com/app",
+      "icon_domain": "discord.com"
+    },
+    {
+      "id": "app.spotify",
+      "name": "Spotify",
+      "aliases": ["spotify"],
+      "version": "1.0.0",
+      "description": "Music and podcasts",
+      "category": "Media",
+      "kind": "web",
+      "url": "https://open.spotify.com",
+      "icon_domain": "spotify.com"
+    },
+    {
+      "id": "app.youtube",
+      "name": "YouTube",
+      "aliases": ["youtube", "yt"],
+      "version": "1.0.0",
+      "description": "Watch and share videos",
+      "category": "Media",
+      "kind": "web",
+      "url": "https://www.youtube.com",
+      "icon_domain": "youtube.com"
+    },
+    {
+      "id": "app.netflix",
+      "name": "Netflix",
+      "aliases": ["netflix"],
+      "version": "1.0.0",
+      "description": "Movies and TV shows",
+      "category": "Media",
+      "kind": "web",
+      "url": "https://www.netflix.com",
+      "icon_domain": "netflix.com"
+    },
+    {
+      "id": "app.vlc",
+      "name": "VLC",
+      "aliases": ["vlc"],
+      "version": "1.0.0",
+      "description": "Plays almost any media file",
+      "category": "Media",
+      "kind": "pkg-wrapper",
+      "package": "vlc",
+      "icon_domain": "videolan.org"
+    },
+    {
+      "id": "app.gimp",
+      "name": "GIMP",
+      "aliases": ["gimp"],
+      "version": "1.0.0",
+      "description": "Photo and image editor",
+      "category": "Creative",
+      "kind": "pkg-wrapper",
+      "package": "gimp",
+      "icon_domain": "gimp.org"
+    },
+    {
+      "id": "app.vscode",
+      "name": "VS Code",
+      "aliases": ["vscode", "code"],
+      "version": "1.0.0",
+      "description": "Code editor for developers",
+      "category": "Productivity",
+      "kind": "pkg-wrapper",
+      "package": "vscode",
+      "icon_domain": "code.visualstudio.com"
+    },
+    {
+      "id": "app.telegram",
+      "name": "Telegram",
+      "aliases": ["telegram"],
+      "version": "1.0.0",
+      "description": "Fast and secure messaging",
+      "category": "Social",
+      "kind": "pkg-wrapper",
+      "package": "telegram-desktop",
+      "icon_domain": "telegram.org"
+    },
+    {
+      "id": "app.whatsapp",
+      "name": "WhatsApp",
+      "aliases": ["whatsapp"],
+      "version": "1.0.0",
+      "description": "Messaging and calls",
+      "category": "Social",
+      "kind": "web",
+      "url": "https://web.whatsapp.com",
+      "icon_domain": "whatsapp.com"
+    },
+    {
+      "id": "app.chatgpt",
+      "name": "ChatGPT",
+      "aliases": ["chatgpt"],
+      "version": "1.0.0",
+      "description": "AI assistant from OpenAI",
+      "category": "Productivity",
+      "kind": "web",
+      "url": "https://chatgpt.com",
+      "icon_domain": "openai.com"
+    },
+    {
+      "id": "app.steam",
+      "name": "Steam",
+      "aliases": ["steam"],
+      "version": "1.0.0",
+      "description": "PC games and store",
+      "category": "Games",
+      "kind": "pkg-wrapper",
+      "package": "linux-steam-utils",
+      "icon_domain": "steampowered.com"
+    },
+    {
+      "id": "app.slack",
+      "name": "Slack",
+      "aliases": ["slack"],
+      "version": "1.0.0",
+      "description": "Team chat and workspaces",
+      "category": "Productivity",
+      "kind": "web",
+      "url": "https://app.slack.com/client",
+      "icon_domain": "slack.com"
+    },
+    {
+      "id": "app.figma",
+      "name": "Figma",
+      "aliases": ["figma"],
+      "version": "1.0.0",
+      "description": "Design and collaboration",
+      "category": "Creative",
+      "kind": "web",
+      "url": "https://www.figma.com",
+      "icon_domain": "figma.com"
+    },
+    {
+      "id": "app.reddit",
+      "name": "Reddit",
+      "aliases": ["reddit"],
+      "version": "1.0.0",
+      "description": "Communities and discussions",
+      "category": "Social",
+      "kind": "web",
+      "url": "https://www.reddit.com",
+      "icon_domain": "reddit.com"
+    },
+    {
+      "id": "app.twitch",
+      "name": "Twitch",
+      "aliases": ["twitch"],
+      "version": "1.0.0",
+      "description": "Live game streaming",
+      "category": "Media",
+      "kind": "web",
+      "url": "https://www.twitch.tv",
+      "icon_domain": "twitch.tv"
+    },
+    {
+      "id": "app.github",
+      "name": "GitHub",
+      "aliases": ["github"],
+      "version": "1.0.0",
+      "description": "Code hosting and collaboration",
+      "category": "Productivity",
+      "kind": "web",
+      "url": "https://github.com",
+      "icon_domain": "github.com"
+    },
+    {
+      "id": "app.tiktok",
+      "name": "TikTok",
+      "aliases": ["tiktok"],
+      "version": "1.0.0",
+      "description": "Short videos",
+      "category": "Social",
+      "kind": "web",
+      "url": "https://www.tiktok.com",
+      "icon_domain": "tiktok.com"
+    },
+    {
+      "id": "app.instagram",
+      "name": "Instagram",
+      "aliases": ["instagram", "ig"],
+      "version": "1.0.0",
+      "description": "Photos and stories",
+      "category": "Social",
+      "kind": "web",
+      "url": "https://www.instagram.com",
+      "icon_domain": "instagram.com"
+    },
+    {
+      "id": "dev.aero.hello",
+      "name": "Hello Aero",
+      "aliases": ["hello", "hello-aero"],
+      "version": "1.0.0",
+      "description": "Example Aero OS app bundle",
+      "category": "Utilities",
+      "source": "local",
+      "file": "/usr/local/share/aero/examples/hello.aero",
+      "icon_domain": "example.com"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+# Large / generated — do not push
+.cache/
+out/
+build-workspace/
+*.iso
+*.zip
+*.partial
+__pycache__/
+.DS_Store
+aero-shell
+aero-settings
+aero-lock
+aero-firstboot
+aero-store
+aero-update-ui
+out-bin/

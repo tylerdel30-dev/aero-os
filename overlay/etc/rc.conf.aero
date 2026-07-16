@@ -1,0 +1,8 @@
+# Aero OS runtime defaults — sourced from /etc/rc.conf
+
+pipewire_enable="YES"
+wireplumber_enable="YES"
+labwc_enable="YES"
+ntfs_enable="YES"
+linux_enable="YES"
+linux_load="YES"

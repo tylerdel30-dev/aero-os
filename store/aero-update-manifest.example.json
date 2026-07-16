@@ -1,0 +1,27 @@
+{
+  "format": 1,
+  "from_version": "1.0.0",
+  "to_version": "1.0.1",
+  "notes": "Example OTA manifest — publish this on a GitHub Release named v1.0.1",
+  "preserve_paths": [
+    "/home",
+    "/root",
+    "/var/db/aero-firstboot-done",
+    "/usr/local/share/aero/wallpapers",
+    "/etc/aero/repos.conf"
+  ],
+  "replace_only": [
+    "/usr/local/bin/aero-shell",
+    "/usr/local/bin/aero-settings",
+    "/usr/local/bin/aero-lock",
+    "/usr/local/bin/aero-firstboot",
+    "/usr/local/bin/aero-update-ui",
+    "/usr/local/bin/aero",
+    "/usr/local/bin/aero-open",
+    "/usr/local/bin/aexes",
+    "/usr/local/bin/aero-notify",
+    "/usr/local/share/aero/style.css"
+  ],
+  "pkg_upgrade": true,
+  "restart_required": true
+}

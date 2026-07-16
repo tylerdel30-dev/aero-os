@@ -1,0 +1,70 @@
+#!/bin/sh
+#
+# aero-dualboot — prepare FreeBSD/Aero alongside Windows (GPT + EFI)
+#
+set -eu
+
+echo "Aero OS dual-boot helper"
+echo "========================"
+
+if [ "$(id -u)" -ne 0 ]; then
+    echo "Run as root: sudo aero-dualboot" >&2
+    exit 1
+fi
+
+echo ""
+echo "== Detected disks =="
+gpart show 2>/dev/null || geom disk list 2>/dev/null || true
+
+echo ""
+echo "== EFI / Windows probes =="
+# List EFI partitions and NTFS volumes
+gpart show -p 2>/dev/null | grep -Ei 'efi|ms-basic|ntfs|freebsd' || true
+if command -v ntfs-3g.probe >/dev/null 2>&1; then
+    for d in /dev/ada* /dev/da* /dev/nvd* /dev/nda*; do
+        [ -e "$d" ] || continue
+        case "$d" in
+            *p[0-9]*|*s[0-9]*)
+                if ntfs-3g.probe --readonly "$d" >/dev/null 2>&1; then
+                    echo "NTFS volume: $d"
+                fi
+                ;;
+        esac
+    done
+fi
+
+ESP=""
+for d in /dev/*p1 /dev/*s1; do
+    [ -e "$d" ] || continue
+    typ="$(gpart show -p 2>/dev/null | grep "${d##*/}" | awk '{print $4}' | head -n 1)"
+    case "${typ}" in
+        efi|EFI) ESP="$d"; break ;;
+    esac
+done
+[ -n "${ESP}" ] && echo "Likely ESP: ${ESP} (do NOT format this)"
+
+FREE_HINT="$(gpart show 2>/dev/null | grep -i free | head -n 3 || true)"
+if [ -n "${FREE_HINT}" ]; then
+    echo ""
+    echo "== Free GPT space (use for Aero) =="
+    echo "${FREE_HINT}"
+else
+    echo ""
+    echo "No free GPT space visible. Shrink Windows from Disk Management first (40GB+)."
+fi
+
+echo ""
+echo "Safe alongside checklist:"
+echo "  1. Backup Windows"
+echo "  2. Shrink NTFS from Windows (leave unallocated space)"
+echo "  3. Boot this media UEFI-only"
+echo "  4. Keep existing ESP — create FreeBSD root in free space only"
+echo "  5. Installer config: /usr/local/etc/bsdinstall/aero/partition.conf"
+echo "  6. After install: efibootmgr / FreeBSD loader lists Aero + Windows"
+echo ""
+printf "Start Aero installer now? [y/N] "
+read -r ans || ans=""
+case "${ans}" in
+    y|Y|yes|YES) exec /usr/local/sbin/aero-install ;;
+    *) echo "Deferred. Run: aero-install   when ready."; exit 0 ;;
+esac

@@ -1,0 +1,121 @@
+/* Aero OS Settings — dual-pane glassmorphic layout */
+
+#aero-settings-root {
+    background-image: linear-gradient(
+        155deg,
+        #1a1a22 0%,
+        #101828 55%,
+        #070d14 100%
+    );
+    color: #e8ecf4;
+    font-family: "Inter", "Segoe UI", sans-serif;
+}
+
+#aero-settings-sidebar {
+    min-width: 210px;
+    max-width: 210px;
+    background-color: rgba(24, 26, 34, 0.72);
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(30px);
+}
+
+.aero-settings-brand {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    padding: 4px 8px 12px 8px;
+    color: rgba(240, 244, 252, 0.95);
+}
+
+.settings-nav-btn {
+    justify-content: flex-start;
+    padding: 10px 14px;
+    margin: 2px 0;
+    border-radius: 12px;
+    background-color: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    color: #dce4f4;
+    transition: background-color 180ms ease, transform 180ms ease;
+}
+
+.settings-nav-btn:hover {
+    background-color: rgba(255, 255, 255, 0.12);
+    transform: translateX(4px);
+}
+
+.nav-account:hover { border-color: rgba(100, 160, 255, 0.35); }
+.nav-display:hover { border-color: rgba(120, 200, 160, 0.35); }
+.nav-updates:hover { border-color: rgba(230, 180, 90, 0.35); }
+.nav-about:hover { border-color: rgba(180, 140, 230, 0.35); }
+
+#aero-settings-stack {
+    background-color: rgba(18, 20, 28, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 18px;
+    padding: 20px 24px;
+    backdrop-filter: blur(22px);
+}
+
+.settings-page-title {
+    font-size: 24px;
+    font-weight: 700;
+    color: #f0f4fc;
+}
+
+.settings-page-subtitle {
+    font-size: 13px;
+    color: rgba(190, 204, 228, 0.78);
+    margin-bottom: 8px;
+}
+
+.settings-info-label {
+    font-size: 13px;
+    color: rgba(210, 220, 238, 0.88);
+    line-height: 1.5;
+}
+
+.settings-account-row {
+    padding: 10px 12px;
+    border-radius: 14px;
+    background-color: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.settings-action-btn {
+    padding: 8px 16px;
+    border-radius: 12px;
+    background-color: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    color: #eef2fa;
+    font-weight: 500;
+    transition: background-color 200ms ease, transform 200ms ease;
+}
+
+.settings-action-btn:hover {
+    background-color: rgba(100, 160, 255, 0.22);
+    transform: translateY(-2px);
+}
+
+.settings-danger-btn:hover {
+    background-color: rgba(255, 120, 100, 0.22);
+}
+
+.settings-progress {
+    min-height: 14px;
+    border-radius: 8px;
+}
+
+.settings-progress progress {
+    background-color: rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+}
+
+.settings-progress progress:progress {
+    background-color: rgba(90, 160, 255, 0.85);
+    border-radius: 8px;
+}
+
+.dock-btn-settings:hover {
+    background-color: rgba(160, 130, 255, 0.22);
+    border-color: rgba(190, 160, 255, 0.35);
+}

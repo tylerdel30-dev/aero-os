@@ -1,0 +1,155 @@
+#!/bin/sh
+#
+# aero-bootstrap — turnkey Aero desktop (offline pkgs + GitHub binaries + compile)
+#
+set -eu
+
+ROOT="${1:-/}"
+OFFLINE="/usr/local/share/aero/offline-packages"
+PACKAGES_FILE="/usr/local/etc/bsdinstall/aero/packages.amd64"
+MARKER="${ROOT}/var/db/aero-desktop-ready"
+RELEASE_BASE="https://github.com/tylerdel30-dev/aero-os/releases/download/v1.0.1"
+BIN_TGZ="aero-desktop-amd64.tar.xz"
+FULL_PKGS_ZIP="AeroOS-1.0.1-offline-packages-full.zip"
+
+echo "Aero OS bootstrap — target: ${ROOT}"
+
+# Copy Aero layer from live media into mounted root when ROOT != /
+if [ "${ROOT}" != "/" ] && [ -d /usr/local/share/aero ]; then
+    echo "==> Syncing Aero files onto ${ROOT}"
+    mkdir -p "${ROOT}/usr/local" "${ROOT}/etc"
+    cp -a /usr/local/bin "${ROOT}/usr/local/" 2>/dev/null || true
+    cp -a /usr/local/sbin "${ROOT}/usr/local/" 2>/dev/null || true
+    cp -a /usr/local/share/aero "${ROOT}/usr/local/share/" 2>/dev/null || true
+    cp -a /usr/local/etc "${ROOT}/usr/local/" 2>/dev/null || true
+    cp -a /etc/aero* "${ROOT}/etc/" 2>/dev/null || true
+    cp -a /etc/rc.conf.aero "${ROOT}/etc/" 2>/dev/null || true
+    cp -a /etc/xdg "${ROOT}/etc/" 2>/dev/null || true
+fi
+
+# Prefer prebuilt desktop binaries from GitHub release (no compile needed)
+fetch_prebuilt_bins() {
+    target_bin="${ROOT}/usr/local/bin"
+    mkdir -p "${target_bin}" /tmp/aero-bins
+    if [ -x "${target_bin}/aero-shell" ] || [ -x /usr/local/bin/aero-shell ]; then
+        echo "==> aero-shell already present"
+        return 0
+    fi
+    echo "==> Fetching prebuilt Aero desktop binaries…"
+    if curl -fsSL -o /tmp/aero-bins/"${BIN_TGZ}" "${RELEASE_BASE}/${BIN_TGZ}"; then
+        tar -xJf /tmp/aero-bins/"${BIN_TGZ}" -C /tmp/aero-bins
+        for b in aero-shell aero-settings aero-lock aero-firstboot aero-store aero-update-ui; do
+            if [ -f "/tmp/aero-bins/${b}" ]; then
+                install -m 0755 "/tmp/aero-bins/${b}" "${target_bin}/${b}"
+            fi
+        done
+        echo "==> Installed prebuilt binaries into ${target_bin}"
+        return 0
+    fi
+    echo "NOTE: prebuilt binaries not on release yet — will compile if swift is available"
+    return 1
+}
+
+# Pull full offline package zip (swift/wine/firefox) when slim ISO lacks them
+fetch_full_offline_pkgs() {
+    if command -v swiftc >/dev/null 2>&1; then
+        return 0
+    fi
+    if [ -d "${OFFLINE}/All" ] && ls "${OFFLINE}/All"/swift510* >/dev/null 2>&1; then
+        return 0
+    fi
+    echo "==> Fetching full offline package set (swift/wine/…)…"
+    mkdir -p /tmp/aero-full-pkgs "${OFFLINE}/All"
+    if curl -fsSL -o /tmp/aero-full-pkgs/"${FULL_PKGS_ZIP}" "${RELEASE_BASE}/${FULL_PKGS_ZIP}"; then
+        if command -v unzip >/dev/null 2>&1; then
+            unzip -qo /tmp/aero-full-pkgs/"${FULL_PKGS_ZIP}" -d "${OFFLINE}/All"
+        else
+            tar -xf /tmp/aero-full-pkgs/"${FULL_PKGS_ZIP}" -C "${OFFLINE}/All" 2>/dev/null || true
+        fi
+    fi
+}
+
+# Configure local offline pkg repo if packages were shipped on the ISO
+if [ -d "${ROOT}${OFFLINE}/All" ] || [ -d "${OFFLINE}/All" ]; then
+    REPO_DIR="${OFFLINE}"
+    [ -d "${ROOT}${OFFLINE}/All" ] && REPO_DIR="${ROOT}${OFFLINE}"
+    echo "==> Enabling offline package repo at ${REPO_DIR}"
+    mkdir -p "${ROOT}/usr/local/etc/pkg/repos"
+    cat > "${ROOT}/usr/local/etc/pkg/repos/Aero.conf" <<EOF
+Aero: {
+  url: "file://${REPO_DIR}",
+  enabled: yes,
+  priority: 10
+}
+EOF
+fi
+
+install_packages() {
+    list_file="$1"
+    [ -f "${list_file}" ] || return 0
+    pkgs="$(grep -v '^#' "${list_file}" | grep -v '^[[:space:]]*$' | tr '\n' ' ')"
+    [ -n "${pkgs}" ] || return 0
+    echo "==> Installing packages: ${pkgs}"
+    if [ "${ROOT}" = "/" ]; then
+        env ASSUME_ALWAYS_YES=yes pkg install -y ${pkgs} || \
+            env ASSUME_ALWAYS_YES=yes pkg install -y -r Aero ${pkgs} || true
+    else
+        chroot "${ROOT}" env ASSUME_ALWAYS_YES=yes pkg install -y ${pkgs} || true
+    fi
+}
+
+if [ "${ROOT}" = "/" ]; then
+    fetch_full_offline_pkgs || true
+fi
+
+LIST="${PACKAGES_FILE}"
+[ -f "${ROOT}${PACKAGES_FILE}" ] && LIST="${ROOT}${PACKAGES_FILE}"
+install_packages "${LIST}"
+
+# Enable services
+RC="${ROOT}/etc/rc.conf"
+touch "${RC}"
+for line in \
+    'dbus_enable="YES"' \
+    'pipewire_enable="YES"' \
+    'wireplumber_enable="YES"' \
+    'labwc_enable="YES"' \
+    'aero_shell_enable="YES"' \
+    'aero_firstboot_enable="YES"'
+do
+    key="$(echo "${line}" | cut -d= -f1)"
+    grep -q "^${key}=" "${RC}" 2>/dev/null || echo "${line}" >> "${RC}"
+done
+if [ -f "${ROOT}/etc/rc.conf.aero" ] || [ -f /etc/rc.conf.aero ]; then
+    grep -q 'rc.conf.aero' "${RC}" 2>/dev/null || echo '. /etc/rc.conf.aero' >> "${RC}"
+fi
+
+# Prebuilt binaries first, then compile fallback
+if [ "${ROOT}" = "/" ]; then
+    fetch_prebuilt_bins || true
+    if [ ! -x /usr/local/bin/aero-shell ]; then
+        if command -v swiftc >/dev/null 2>&1; then
+            echo "==> Compiling Aero desktop (Swift + GTK4)"
+            /usr/local/sbin/aero-build-desktop || echo "WARNING: compile failed"
+        else
+            echo "NOTE: no aero-shell yet — install swift510 + gtk4, then: aero-build-desktop"
+            echo "  or wait for ${RELEASE_BASE}/${BIN_TGZ}"
+        fi
+    fi
+else
+    fetch_prebuilt_bins || true
+    if [ ! -x "${ROOT}/usr/local/bin/aero-shell" ]; then
+        if chroot "${ROOT}" /bin/sh -c 'command -v swiftc' >/dev/null 2>&1; then
+            chroot "${ROOT}" /usr/local/sbin/aero-build-desktop || true
+        fi
+    fi
+fi
+
+mkdir -p "${ROOT}/var/db"
+date -u +"Aero desktop bootstrap %Y-%m-%dT%H:%M:%SZ" > "${MARKER}" 2>/dev/null || \
+    echo "Aero desktop bootstrap done" > "${MARKER}"
+
+echo "Bootstrap finished."
+[ -x "${ROOT}/usr/local/bin/aero-shell" ] || [ -x /usr/local/bin/aero-shell ] && \
+    echo "Desktop binary: OK (aero-shell)" || echo "Desktop binary: PENDING"
+echo "Reboot into Aero (labwc + aero-shell)."

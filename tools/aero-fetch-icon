@@ -1,0 +1,58 @@
+#!/bin/sh
+#
+# aero-fetch-icon — download an app icon from the internet and cache it
+#
+# Usage: aero-fetch-icon <app-id> <domain>
+# Saves to: ~/.cache/aero/icons/<app-id>.png
+# Tries Clearbit logos, then Google favicons (free, no API key).
+
+set -eu
+
+APP_ID="${1:-}"
+DOMAIN="${2:-}"
+[ -n "${APP_ID}" ] && [ -n "${DOMAIN}" ] || {
+    echo "usage: aero-fetch-icon <app-id> <domain>" >&2
+    exit 1
+}
+
+CACHE_DIR="${HOME}/.cache/aero/icons"
+mkdir -p "${CACHE_DIR}"
+DEST="${CACHE_DIR}/${APP_ID}.png"
+
+# Already cached and non-empty
+if [ -s "${DEST}" ]; then
+    printf '%s\n' "${DEST}"
+    exit 0
+fi
+
+TMP="$(mktemp)"
+trap 'rm -f "${TMP}"' EXIT
+
+# 1) Clearbit brand logo (PNG)
+if curl -fsSL --max-time 8 -o "${TMP}" "https://logo.clearbit.com/${DOMAIN}" 2>/dev/null \
+    && [ -s "${TMP}" ]; then
+    # Clearbit returns PNG; keep as-is
+    cp "${TMP}" "${DEST}"
+    printf '%s\n' "${DEST}"
+    exit 0
+fi
+
+# 2) Google high-res favicon
+if curl -fsSL --max-time 8 -o "${TMP}" \
+    "https://www.google.com/s2/favicons?domain=${DOMAIN}&sz=128" 2>/dev/null \
+    && [ -s "${TMP}" ]; then
+    cp "${TMP}" "${DEST}"
+    printf '%s\n' "${DEST}"
+    exit 0
+fi
+
+# 3) DuckDuckGo icons
+if curl -fsSL --max-time 8 -o "${TMP}" \
+    "https://icons.duckduckgo.com/ip3/${DOMAIN}.ico" 2>/dev/null \
+    && [ -s "${TMP}" ]; then
+    cp "${TMP}" "${DEST}"
+    printf '%s\n' "${DEST}"
+    exit 0
+fi
+
+exit 1

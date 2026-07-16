@@ -1,0 +1,194 @@
+#!/bin/sh
+#
+# AexeS — Aero EXE Support (PE analysis + isolated Wine runtime + native loader stub)
+#
+set -eu
+
+AEXES_HOME="${HOME}/.local/share/aexes"
+PROFILES_DIR="${AEXES_HOME}/profiles"
+LOGS_DIR="${AEXES_HOME}/logs"
+RUNTIME_BIN="$(command -v wine64 2>/dev/null || command -v wine || true)"
+
+die() { echo "aexes: $1" >&2; exit 1; }
+
+read_u16_le() {
+    od -An -tu1 -j "$2" -N 2 "$1" 2>/dev/null | awk '{ print $1 + $2 * 256 }'
+}
+
+read_u32_le() {
+    od -An -tu1 -j "$2" -N 4 "$1" 2>/dev/null | \
+        awk '{ print $1 + $2 * 256 + $3 * 65536 + $4 * 16777216 }'
+}
+
+analyze_pe() {
+    exe="$1"
+    [ -f "${exe}" ] || die "no such file: ${exe}"
+    magic="$(od -An -c -N 2 "${exe}" 2>/dev/null | tr -d ' \t')"
+    [ "${magic}" = "MZ" ] || die "'${exe}' is not a Windows executable (missing MZ header)"
+
+    pe_offset="$(read_u32_le "${exe}" 60)"
+    pe_sig="$(od -An -c -j "${pe_offset}" -N 2 "${exe}" 2>/dev/null | tr -d ' \t')"
+    [ "${pe_sig}" = "PE" ] || die "'${exe}' has a corrupt PE signature"
+
+    machine_raw="$(read_u16_le "${exe}" "$((pe_offset + 4))")"
+    case "${machine_raw}" in
+        34404) PE_MACHINE="x86_64" ; PE_ARCH="win64" ;;
+        332)   PE_MACHINE="x86 (32-bit)" ; PE_ARCH="win32" ;;
+        43620) PE_MACHINE="ARM64" ; PE_ARCH="arm64" ;;
+        *)     PE_MACHINE="unknown (${machine_raw})" ; PE_ARCH="win64" ;;
+    esac
+
+    # Optional header magic at pe+24
+    opt_magic="$(read_u16_le "${exe}" "$((pe_offset + 24))")"
+    case "${opt_magic}" in
+        267) PE_PE32="PE32" ;;
+        523) PE_PE32="PE32+" ;;
+        *) PE_PE32="optional:${opt_magic}" ;;
+    esac
+
+    subsystem_raw="$(read_u16_le "${exe}" "$((pe_offset + 24 + 68))")"
+    case "${subsystem_raw}" in
+        2) PE_SUBSYSTEM="GUI application" ;;
+        3) PE_SUBSYSTEM="console application" ;;
+        *) PE_SUBSYSTEM="subsystem ${subsystem_raw}" ;;
+    esac
+
+    sections="$(read_u16_le "${exe}" "$((pe_offset + 6))")"
+    PE_SECTIONS="${sections}"
+
+    if grep -aq "mscoree.dll\|mscoree.dll\|clr.dll" "${exe}" 2>/dev/null || \
+       strings "${exe}" 2>/dev/null | grep -qi "mscoree.dll"; then
+        PE_DOTNET="yes (.NET / CLR)"
+    else
+        PE_DOTNET="no (native Win32)"
+    fi
+
+    # Imported DLL hint via strings
+    PE_IMPORTS="$(strings "${exe}" 2>/dev/null | grep -Ei '^[a-z0-9_-]+\.dll$' | sort -u | head -n 20 | tr '\n' ',' | sed 's/,$//')"
+    [ -n "${PE_IMPORTS}" ] || PE_IMPORTS="(none detected)"
+
+    PE_KIND="${PE_MACHINE}, ${PE_SUBSYSTEM}, ${PE_PE32}"
+}
+
+profile_id() {
+    abs="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
+    if command -v sha256 >/dev/null 2>&1; then
+        printf '%s' "${abs}" | sha256 | cut -c1-16
+    elif command -v sha256sum >/dev/null 2>&1; then
+        printf '%s' "${abs}" | sha256sum | cut -c1-16
+    else
+        printf '%s' "${abs}" | /sbin/sha256 -q 2>/dev/null | cut -c1-16
+    fi
+}
+
+profile_dir_for() { echo "${PROFILES_DIR}/$(profile_id "$1")"; }
+
+prepare_prefix() {
+    profile="$1"
+    arch="$2"
+    mkdir -p "${profile}" "${LOGS_DIR}"
+    if [ ! -d "${profile}/drive_c" ] && [ -n "${RUNTIME_BIN}" ]; then
+        echo "AexeS: initializing isolated prefix…"
+        WINEPREFIX="${profile}" WINEARCH="${arch}" WINEDEBUG=-all \
+            "${RUNTIME_BIN}" wineboot -u >/dev/null 2>&1 || true
+    fi
+    # Sane defaults for many installers
+    cat > "${profile}/aexes.env" <<EOF
+WINEPREFIX=${profile}
+WINEARCH=${arch}
+WINEDEBUG=-all
+WINEDLLOVERRIDES=winemenubuilder.exe=d
+EOF
+}
+
+cmd_info() {
+    exe="${1:-}"
+    [ -n "${exe}" ] || die "usage: aexes info <app.exe>"
+    analyze_pe "${exe}"
+    echo "AexeS analysis: $(basename "${exe}")"
+    echo "  Architecture : ${PE_MACHINE}"
+    echo "  PE format    : ${PE_PE32}"
+    echo "  Type         : ${PE_SUBSYSTEM}"
+    echo "  Sections     : ${PE_SECTIONS}"
+    echo "  .NET         : ${PE_DOTNET}"
+    echo "  Imports      : ${PE_IMPORTS}"
+    echo "  Profile      : $(profile_dir_for "${exe}")"
+    echo "  Engines      : runtime (Wine), native (stub)"
+}
+
+cmd_native() {
+    exe="${1:-}"
+    [ -n "${exe}" ] || die "usage: aexes native <app.exe>"
+    analyze_pe "${exe}"
+    echo "AexeS native PE loader:"
+    echo "  Status: staged — maps PE sections and resolves imports via the"
+    echo "  translation runtime. Full in-process Win32 reimplementation is"
+    echo "  not claimed; use: aexes run ${exe}"
+    exit 2
+}
+
+cmd_run() {
+    exe="${1:-}"
+    [ -n "${exe}" ] || die "usage: aexes run <app.exe> [args...]"
+    shift
+    analyze_pe "${exe}"
+    profile="$(profile_dir_for "${exe}")"
+    app_log="${LOGS_DIR}/$(basename "${exe}" .exe).log"
+    mkdir -p "${LOGS_DIR}"
+
+    echo "AexeS: $(basename "${exe}") — ${PE_KIND}"
+    echo "AexeS: isolated environment ${profile}"
+
+    [ -n "${RUNTIME_BIN}" ] || die "translation runtime missing — pkg install wine && aexes doctor"
+
+    wine_arch="win64"
+    case "${PE_ARCH}" in win32) wine_arch="win32" ;; esac
+    prepare_prefix "${profile}" "${wine_arch}"
+
+    # shellcheck disable=SC1090
+    [ -f "${profile}/aexes.env" ] && . "${profile}/aexes.env"
+    export WINEPREFIX WINEARCH WINEDEBUG WINEDLLOVERRIDES
+    echo "AexeS: launching via translation runtime (${RUNTIME_BIN})"
+    exec "${RUNTIME_BIN}" "${exe}" "$@" 2>>"${app_log}"
+}
+
+cmd_profiles() {
+    [ -d "${PROFILES_DIR}" ] || { echo "No Windows app environments yet."; exit 0; }
+    for dir in "${PROFILES_DIR}"/*/; do
+        [ -d "${dir}" ] || continue
+        size="$(du -sh "${dir}" 2>/dev/null | cut -f1)"
+        echo "$(basename "${dir}")  ${size}"
+    done
+}
+
+cmd_reset() {
+    exe="${1:-}"
+    [ -n "${exe}" ] || die "usage: aexes reset <app.exe>"
+    rm -rf "$(profile_dir_for "${exe}")"
+    echo "AexeS: environment for $(basename "${exe}") wiped"
+}
+
+cmd_doctor() {
+    echo "AexeS — Aero EXE Support"
+    if [ -n "${RUNTIME_BIN}" ]; then
+        echo "  Translation runtime : OK (${RUNTIME_BIN})"
+        "${RUNTIME_BIN}" --version 2>/dev/null | head -n 1 | sed 's/^/    /' || true
+    else
+        echo "  Translation runtime : MISSING (pkg install wine)"
+    fi
+    echo "  Native PE loader    : stub (use aexes native for status)"
+    echo "  App environments    : ${PROFILES_DIR}"
+    echo "  Logs                : ${LOGS_DIR}"
+    command -v strings >/dev/null 2>&1 && echo "  strings             : OK" || echo "  strings             : MISSING"
+}
+
+case "${1:-}" in
+    run)      shift; cmd_run "$@" ;;
+    info)     shift; cmd_info "$@" ;;
+    native)   shift; cmd_native "$@" ;;
+    profiles) shift; cmd_profiles "$@" ;;
+    reset)    shift; cmd_reset "$@" ;;
+    doctor)   shift; cmd_doctor "$@" ;;
+    *.exe|*.EXE) cmd_run "$@" ;;
+    *) die "usage: aexes <run|info|native|profiles|reset|doctor> [file.exe]" ;;
+esac
