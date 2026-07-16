@@ -9,8 +9,13 @@ BIN="/usr/local/bin"
 export PATH="/usr/local/bin:/usr/bin:/bin:${PATH}"
 
 if ! command -v swiftc >/dev/null 2>&1; then
-    # swift510 package layout
-    for c in /usr/local/bin/swiftc /usr/local/libexec/swift*/bin/swiftc /usr/local/swift*/usr/bin/swiftc; do
+    # FreeBSD swift510 package installs to /usr/local/swift510/bin
+    for c in \
+        /usr/local/swift510/bin/swiftc \
+        /usr/local/bin/swiftc \
+        /usr/local/libexec/swift*/bin/swiftc \
+        /usr/local/swift*/usr/bin/swiftc
+    do
         if [ -x "${c}" ]; then
             export PATH="$(dirname "${c}"):${PATH}"
             break

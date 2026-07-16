@@ -31,20 +31,24 @@ jobs:
             pkg update -f || true
             pkg install -y swift510 gtk4 gtk4-layer-shell pkgconf labwc gmake curl || \
               pkg install -y -f swift510 gtk4 gtk4-layer-shell pkgconf labwc gmake curl
-            ln -sf /usr/local/bin/swiftc /usr/local/bin/swiftc-aero || true
-            if ! command -v swiftc >/dev/null 2>&1; then
-              ls /usr/local/bin/swift* || true
-              for c in /usr/local/bin/swiftc /usr/local/lib/swift*/bin/swiftc /usr/local/libexec/swift*/bin/swiftc; do
-                [ -x "$c" ] && ln -sf "$c" /usr/local/bin/swiftc && break
-              done
+            # FreeBSD ports put swiftc under /usr/local/swift510/bin
+            if [ -x /usr/local/swift510/bin/swiftc ]; then
+              ln -sf /usr/local/swift510/bin/swiftc /usr/local/bin/swiftc
+              ln -sf /usr/local/swift510/bin/swift /usr/local/bin/swift || true
+              echo 'export PATH=/usr/local/swift510/bin:$PATH' > /etc/profile.d/aero-swift.sh
             fi
-            swiftc --version || true
+            export PATH="/usr/local/swift510/bin:/usr/local/bin:${PATH}"
+            command -v swiftc
+            swiftc --version
             pkg-config --modversion gtk4 || true
           run: |
             set -e
             export IGNORE_OSVERSION=yes
+            export PATH="/usr/local/swift510/bin:/usr/local/bin:/usr/bin:/bin:${PATH}"
             WORK="$(pwd)"
             echo "workspace=$WORK"
+            command -v swiftc
+            swiftc --version
             ls -la
             chmod +x overlay/usr/local/sbin/aero-build-desktop
             mkdir -p /usr/local/share/aero/src /usr/local/bin /usr/local/sbin
