@@ -22,6 +22,11 @@ wl-clipboard
 wlr-randr
 gtk4
 gtk4-layer-shell
+python312
+py312-pygobject
+pygobject-common
+py312-pycairo
+gobject-introspection
 pkgconf
 pipewire
 wireplumber
@@ -43,9 +48,9 @@ inter-font
 pkg
 xdg-utils
 shared-mime-info
-# Optional heavy apps (network or full offline zip — not required for desktop)
+firefox
+wine
+wine-mono
+wine-gecko
+# Optional (large) — also in AeroOS-1.0.1-offline-packages-full.zip
 # swift510
-# firefox
-# wine
-# wine-mono
-# wine-gecko

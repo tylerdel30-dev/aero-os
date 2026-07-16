@@ -104,25 +104,16 @@ Copy-IfExists (Join-Path $ProjectRoot "releases\v1.0.1\aero-update-manifest.json
 
 foreach ($tool in @(
     "aero", "aero-sound", "aero-notify", "aero-open", "aexes", "aero-fetch-icon", "aero-windows",
-    "aero-shell-lite", "aero-settings-lite", "aero-lock-lite", "aero-store-lite", "aero-firstboot-lite"
+    "aero-shell-lite", "aero-settings-lite", "aero-lock-lite", "aero-store-lite", "aero-firstboot-lite",
+    "aero-shell-gtk", "aero-settings-gtk", "aero-lock-gtk", "aero-store-gtk", "aero-firstboot-gtk",
+    "aero-shell", "aero-settings", "aero-lock", "aero-store", "aero-firstboot"
 )) {
     Copy-IfExists (Join-Path $ProjectRoot "tools\$tool") (Join-Path $OverlayDir "usr\local\bin\$tool") | Out-Null
     Copy-IfExists (Join-Path $ProjectRoot "tools\$tool") (Join-Path $share "tools\$tool") | Out-Null
 }
-# Canonical names point at lite scripts (no Swift ELFs required)
-foreach ($pair in @(
-    @{ Full = "aero-shell"; Lite = "aero-shell-lite" },
-    @{ Full = "aero-settings"; Lite = "aero-settings-lite" },
-    @{ Full = "aero-lock"; Lite = "aero-lock-lite" },
-    @{ Full = "aero-store"; Lite = "aero-store-lite" },
-    @{ Full = "aero-firstboot"; Lite = "aero-firstboot-lite" }
-)) {
-    $litePath = Join-Path $OverlayDir "usr\local\bin\$($pair.Lite)"
-    $fullPath = Join-Path $OverlayDir "usr\local\bin\$($pair.Full)"
-    if ((Test-Path $litePath) -and -not (Test-Path $fullPath)) {
-        Copy-Item $litePath $fullPath -Force
-    }
-}
+New-Dir (Join-Path $share "lib")
+Copy-IfExists (Join-Path $ProjectRoot "tools\aero_gtk_common.py") (Join-Path $share "lib\aero_gtk_common.py") | Out-Null
+Copy-IfExists (Join-Path $ProjectRoot "tools\aero_gtk_common.py") (Join-Path $OverlayDir "usr\local\bin\aero_gtk_common.py") | Out-Null
 
 # Inject prebuilt FreeBSD desktop ELFs when available (optional override)
 $prebuiltDirs = @(

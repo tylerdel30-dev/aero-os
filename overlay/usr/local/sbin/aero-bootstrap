@@ -30,35 +30,37 @@ fi
 
 install_lite_desktop() {
     target_bin="${ROOT}/usr/local/bin"
-    mkdir -p "${target_bin}"
-    for pair in \
-        "aero-shell-lite:aero-shell" \
-        "aero-settings-lite:aero-settings" \
-        "aero-lock-lite:aero-lock" \
-        "aero-store-lite:aero-store" \
-        "aero-firstboot-lite:aero-firstboot"
+    share_lib="${ROOT}/usr/local/share/aero/lib"
+    mkdir -p "${target_bin}" "${share_lib}"
+    for name in \
+        aero-shell-gtk aero-settings-gtk aero-lock-gtk aero-store-gtk aero-firstboot-gtk \
+        aero-shell-lite aero-settings-lite aero-lock-lite aero-store-lite aero-firstboot-lite \
+        aero-shell aero-settings aero-lock aero-store aero-firstboot \
+        aero_gtk_common.py
     do
-        lite="${pair%%:*}"
-        full="${pair##*:}"
         src=""
         for cand in \
-            "${target_bin}/${lite}" \
-            "/usr/local/bin/${lite}" \
-            "/usr/local/share/aero/tools/${lite}" \
-            "${ROOT}/usr/local/share/aero/tools/${lite}"
+            "${target_bin}/${name}" \
+            "/usr/local/bin/${name}" \
+            "/usr/local/share/aero/tools/${name}" \
+            "/usr/local/share/aero/lib/${name}" \
+            "${ROOT}/usr/local/share/aero/tools/${name}" \
+            "${ROOT}/usr/local/share/aero/lib/${name}"
         do
             [ -f "${cand}" ] && src="${cand}" && break
         done
         [ -n "${src}" ] || continue
-        install -m 0755 "${src}" "${target_bin}/${lite}"
-        # Canonical name → lite unless a real ELF already exists
-        if [ ! -e "${target_bin}/${full}" ]; then
-            ln -sf "${lite}" "${target_bin}/${full}"
-        elif file "${target_bin}/${full}" 2>/dev/null | grep -qi 'script\|text'; then
-            ln -sf "${lite}" "${target_bin}/${full}"
-        fi
+        case "${name}" in
+            *.py) install -m 0644 "${src}" "${share_lib}/${name}" ;;
+            *) install -m 0755 "${src}" "${target_bin}/${name}" ;;
+        esac
     done
-    echo "==> Lite desktop ready (no Swift compile required)"
+    # Ensure python can import helpers from share/lib
+    if [ -f "${share_lib}/aero_gtk_common.py" ]; then
+        ln -sf ../share/aero/lib/aero_gtk_common.py "${target_bin}/aero_gtk_common.py" 2>/dev/null || \
+            install -m 0644 "${share_lib}/aero_gtk_common.py" "${target_bin}/aero_gtk_common.py"
+    fi
+    echo "==> Glass GTK + lite desktop commands ready"
 }
 
 fetch_prebuilt_bins() {
@@ -80,8 +82,22 @@ fetch_prebuilt_bins() {
 }
 
 fetch_full_offline_pkgs() {
-    [ "${AERO_FETCH_FULL_PKGS:-0}" = "1" ] || return 0
-    echo "==> Fetching full offline package set…"
+    # Auto-fetch release zip for swift + any missing wine extras
+    need_fetch=0
+    if [ "${AERO_FETCH_FULL_PKGS:-1}" = "0" ]; then
+        return 0
+    fi
+    if [ ! -d "${OFFLINE}/All" ] || ! ls "${OFFLINE}/All"/wine-* >/dev/null 2>&1; then
+        need_fetch=1
+    fi
+    if ! ls "${OFFLINE}/All"/swift510* >/dev/null 2>&1 2>/dev/null; then
+        need_fetch=1
+    fi
+    if [ "${AERO_FETCH_FULL_PKGS:-1}" = "force" ]; then
+        need_fetch=1
+    fi
+    [ "${need_fetch}" = "1" ] || return 0
+    echo "==> Fetching full offline package set (includes swift510)…"
     mkdir -p /tmp/aero-full-pkgs "${OFFLINE}/All"
     if curl -fsSL -o /tmp/aero-full-pkgs/"${FULL_PKGS_ZIP}" "${RELEASE_BASE}/${FULL_PKGS_ZIP}"; then
         if command -v unzip >/dev/null 2>&1; then

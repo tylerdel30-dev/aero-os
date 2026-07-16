@@ -89,28 +89,27 @@ def main() -> int:
         "aero-lock-lite",
         "aero-store-lite",
         "aero-firstboot-lite",
+        "aero-shell-gtk",
+        "aero-settings-gtk",
+        "aero-lock-gtk",
+        "aero-store-gtk",
+        "aero-firstboot-gtk",
+        "aero-shell",
+        "aero-settings",
+        "aero-lock",
+        "aero-store",
+        "aero-firstboot",
     ):
         copy_into(ROOT / "tools" / tool, OVERLAY / "usr" / "local" / "bin" / tool)
-        # Also keep copies under share for bootstrap rediscovery
         copy_into(ROOT / "tools" / tool, share / "tools" / tool)
 
-    # Canonical names → lite scripts (ISO boots without Swift ELFs)
+    # Shared Python GTK helpers
+    lib = share / "lib"
+    lib.mkdir(parents=True, exist_ok=True)
+    copy_into(ROOT / "tools" / "aero_gtk_common.py", lib / "aero_gtk_common.py")
+    copy_into(ROOT / "tools" / "aero_gtk_common.py", OVERLAY / "usr" / "local" / "bin" / "aero_gtk_common.py")
+
     bin_dir = OVERLAY / "usr" / "local" / "bin"
-    for full, lite in (
-        ("aero-shell", "aero-shell-lite"),
-        ("aero-settings", "aero-settings-lite"),
-        ("aero-lock", "aero-lock-lite"),
-        ("aero-store", "aero-store-lite"),
-        ("aero-firstboot", "aero-firstboot-lite"),
-    ):
-        lite_path = bin_dir / lite
-        full_path = bin_dir / full
-        if lite_path.is_file() and not full_path.exists():
-            try:
-                full_path.symlink_to(lite)
-            except OSError:
-                shutil.copy2(lite_path, full_path)
-                full_path.chmod(0o755)
 
     copy_into(ROOT / "config" / "oauth.conf.example", OVERLAY / "usr" / "local" / "share" / "aero" / "docs" / "oauth.conf.example")
     copy_into(ROOT / "config" / "oauth.conf.example", OVERLAY / "etc" / "aero" / "oauth.conf.example")
@@ -141,16 +140,20 @@ def main() -> int:
     copy_into(ROOT / "releases" / "DOWNLOADS.md", OVERLAY / "aero" / "DOWNLOADS.md")
     copy_into(ROOT / "examples" / "hello-aero", share / "examples" / "hello-aero")
 
-    # Offline packages
+    # Offline packages (skip huge toolchain blobs to stay under GitHub 2GB ISO limit)
     if PKG_ALL.exists() and any(PKG_ALL.glob("*.pkg")):
         dest_all = share / "offline-packages" / "All"
         dest_all.mkdir(parents=True, exist_ok=True)
         count = 0
+        skipped = 0
+        skip_prefixes = ("llvm", "gcc", "rust", "swift510")
         for pkg in PKG_ALL.glob("*.pkg"):
+            if pkg.name.lower().startswith(skip_prefixes):
+                skipped += 1
+                continue
             shutil.copy2(pkg, dest_all / pkg.name)
             count += 1
-        print(f"Staged {count} offline packages")
-        # minimal meta for pkg
+        print(f"Staged {count} offline packages (skipped {skipped} toolchain pkgs)")
         (share / "offline-packages" / "meta.conf").write_text(
             'version = "2";\ndumping_period = "0";\n', encoding="ascii"
         )
@@ -201,9 +204,9 @@ def main() -> int:
 
     readme = OVERLAY / "AERO-README.TXT"
     readme.write_text(
-        "Aero OS 1.0.1 Stratus — boots with aero-shell-lite (no Swift compile).\n"
-        "Start menu: Super+Space or right-click desktop.\n"
-        "Optional Swift GTK shell: AERO_COMPILE=1 aero-bootstrap  (needs swift510)\n",
+        "Aero OS 1.0.1 Stratus - liquid glass desktop via aero-shell-gtk (Python GTK4).\n"
+        "Includes Firefox, Wine, Python/PyGObject. Start menu: Super+Space.\n"
+        "Dock + top bar use style.css glass theme. Optional Swift: offline zip / AERO_COMPILE=1.\n",
         encoding="ascii",
     )
     shutil.copy2(readme, OVERLAY / "README.TXT")

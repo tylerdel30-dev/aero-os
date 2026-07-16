@@ -1,0 +1,106 @@
+#!/usr/bin/env python3
+"""Aero OS first-boot welcome overlay (Python GTK4)."""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+_HERE = Path(__file__).resolve().parent
+for _p in (_HERE, Path("/usr/local/share/aero/lib")):
+    if str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))
+
+try:
+    import aero_gtk_common as aero
+except ImportError as exc:
+    print(f"aero-firstboot-gtk: cannot load helpers ({exc})", file=sys.stderr)
+    sys.exit(1)
+
+gi, Gtk, Gdk, GLib, Gio = aero.import_gtk()
+
+DONE = aero.config_dir() / "firstboot-done"
+
+
+def _logo_path() -> Path | None:
+    share = aero.share_dir()
+    for name in ("firstboot-logo.png", "aero-logo.png"):
+        p = share / name
+        if p.is_file():
+            return p
+    return None
+
+
+class FirstBootApp(Gtk.Application):
+    def __init__(self) -> None:
+        super().__init__(application_id="org.aero.firstboot.gtk")
+        self._win: Gtk.ApplicationWindow | None = None
+
+    def do_activate(self) -> None:
+        if DONE.is_file():
+            self.quit()
+            return
+
+        aero.play_sound("startup")
+        win = Gtk.ApplicationWindow(application=self, title="Welcome")
+        self._win = win
+        mode = aero.setup_layer_shell(win, namespace="aero-firstboot")
+        if mode == "fallback":
+            win.fullscreen()
+            win.set_decorated(False)
+
+        aero.load_css(win)
+        overlay = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        overlay.set_name("aero-firstboot-overlay")
+        overlay.set_hexpand(True)
+        overlay.set_vexpand(True)
+        overlay.set_valign(Gtk.Align.CENTER)
+        overlay.set_halign(Gtk.Align.CENTER)
+
+        logo = _logo_path()
+        if logo:
+            pic = Gtk.Picture.new_for_filename(str(logo))
+            pic.set_can_shrink(True)
+            pic.set_content_fit(Gtk.ContentFit.SCALE_DOWN)
+            pic.set_size_request(320, 320)
+            overlay.append(pic)
+        else:
+            overlay.append(Gtk.Label(label="Aero OS", css_classes=["settings-page-title"]))
+
+        win.set_child(overlay)
+        win.set_opacity(1.0)
+        win.present()
+        GLib.timeout_add(2000, self._fade_out)
+
+    def _fade_out(self) -> bool:
+        if not self._win:
+            return False
+        self._fade_step = 10
+
+        def step() -> bool:
+            if not self._win:
+                return False
+            self._fade_step -= 1
+            self._win.set_opacity(max(0.0, self._fade_step / 10.0))
+            if self._fade_step <= 0:
+                self._finish()
+                return False
+            return True
+
+        GLib.timeout_add(40, step)
+        return False
+
+    def _finish(self) -> bool:
+        DONE.touch()
+        if self._win:
+            self._win.close()
+        self.quit()
+        return False
+
+
+def main() -> int:
+    return FirstBootApp().run(sys.argv)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

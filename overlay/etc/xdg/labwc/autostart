@@ -1,19 +1,25 @@
-# Aero OS first session — lite desktop by default (no Swift compile required)
+# Aero OS first session — glass GTK shell when Python/GTK available
 
-# Packages + optional GitHub binaries only (never block the session on compile)
-if [ ! -x /usr/local/bin/aero-shell ] && [ ! -x /usr/local/bin/aero-shell-lite ]; then
+# Bootstrap packages (firefox/wine/python) if needed
+if [ ! -x /usr/local/bin/aero-shell-gtk ] && [ ! -x /usr/local/bin/aero-shell-lite ]; then
     /usr/local/sbin/aero-bootstrap / >/tmp/aero-bootstrap.log 2>&1 || true
 fi
 
-# Wallpaper + Start menu helpers
-if [ -x /usr/local/bin/aero-shell ]; then
+# Prefer liquid-glass Python GTK shell, then Swift ELF, then lite
+if [ -x /usr/local/bin/aero-shell-gtk ] && command -v python3 >/dev/null 2>&1; then
+    /usr/local/bin/aero-shell-gtk &
+elif [ -x /usr/local/bin/aero-shell ] && file /usr/local/bin/aero-shell 2>/dev/null | grep -qi 'ELF'; then
+    /usr/local/bin/aero-shell &
+elif [ -x /usr/local/bin/aero-shell ]; then
     /usr/local/bin/aero-shell &
 elif [ -x /usr/local/bin/aero-shell-lite ]; then
     /usr/local/bin/aero-shell-lite &
 fi
 
-# First-boot welcome (lite or full)
-if [ -x /usr/local/bin/aero-firstboot ]; then
+# First-boot
+if [ -x /usr/local/bin/aero-firstboot-gtk ] && command -v python3 >/dev/null 2>&1; then
+    /usr/local/bin/aero-firstboot-gtk &
+elif [ -x /usr/local/bin/aero-firstboot ]; then
     /usr/local/bin/aero-firstboot &
 elif [ -x /usr/local/bin/aero-firstboot-lite ]; then
     /usr/local/bin/aero-firstboot-lite &
