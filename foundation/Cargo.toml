@@ -1,0 +1,12 @@
+[workspace]
+resolver = "2"
+members = [
+    "kernel",
+    "builder",
+]
+default-members = ["builder"]
+
+[profile.release]
+panic = "abort"
+lto = true
+codegen-units = 1

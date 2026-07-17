@@ -1,8 +1,10 @@
-# Large / generated â€” do not push
+# Large / generated — do not push
 .cache/
 out/
 build-workspace/
+foundation/target/
 *.iso
+*.img
 *.zip
 *.partial
 __pycache__/

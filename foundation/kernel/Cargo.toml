@@ -1,0 +1,16 @@
+[package]
+name = "aero-kernel"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "aero-kernel"
+path = "src/main.rs"
+
+[dependencies]
+uefi = { version = "0.33", features = ["alloc", "global_allocator", "panic_handler"] }
+noto-sans-mono-bitmap = { version = "0.3", default-features = false, features = ["regular", "size_16"] }
+
+[build-dependencies]
+image = { version = "0.25", default-features = false, features = ["png"] }

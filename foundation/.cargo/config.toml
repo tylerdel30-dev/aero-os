@@ -1,0 +1,2 @@
+# Kernel build passes -Zbuild-std on the cargo command line.
+# Do not force build-std here — the host builder must compile normally.

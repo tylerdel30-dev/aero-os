@@ -4,21 +4,23 @@
 
 ## Current images
 
-| Version | File | Size | Notes |
-|--------|------|------|--------|
-| v1.0.1 Stratus | `AeroOS-1.0.1-Stratus.iso` | **~2.6 GB** | Full amd64: FreeBSD 14.3 + Aero + **185 offline packages** (labwc/gtk4/swift/wine/firefox…) |
-| v1.0.1 Stratus | `AeroOS-1.0.1-Stratus-aarch64.iso` | ~1+ GB | Full arm64 FreeBSD disc1 + Aero layer |
+| Version | File | Notes |
+|--------|------|--------|
+| Foundation 0.1 | `AeroOS-Foundation-0.1.0.img` | UEFI disk image — Aero native kernel + glass Setup |
+| Foundation 0.1 | `AeroOS-Foundation-0.1.0.iso` | UEFI ISO |
 
-## Turnkey path (after install)
+SHA256:
 
-```
-aero-bootstrap /
-aero-build-desktop   # compiles aero-shell, settings, lock, store, firstboot, update-ui
-reboot
-```
+| File | Hash |
+|------|------|
+| `.img` | `67b08dcc35ed338edda709a067f38b6c234bfce92ec5e275f39f3a15dc4b9bda` |
+| `.iso` | `da0e361408a70bd42855c2d6c1b8bcb68544dc639bb8176acf327c25bc643c85` |
 
-Or enable labwc (autostart runs bootstrap/compile if binaries missing).
+Build: `.\tools\build_foundation.ps1`
 
-## Rufus
+VMware: Other 64-bit, UEFI, attach the `.img` as HDD.  
+Guide: [foundation/tools/run_vmware.md](../foundation/tools/run_vmware.md)
 
-SELECT `AeroOS-1.0.1-Stratus.iso` · GPT + UEFI · DD mode · 8 GB+ USB
+## Writing USB
+
+Prefer DD / image mode with the `.iso` or `.img`, or `.\write_usb.ps1` for the ISO.

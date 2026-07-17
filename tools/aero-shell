@@ -1,9 +1,0 @@
-#!/bin/sh
-# aero-shell — prefer glass GTK, then Swift ELF, then lite
-if [ -x /usr/local/bin/aero-shell-gtk ] && command -v python3 >/dev/null 2>&1; then
-    exec /usr/local/bin/aero-shell-gtk "$@"
-fi
-if [ -x /usr/local/bin/aero-shell.elf ]; then
-    exec /usr/local/bin/aero-shell.elf "$@"
-fi
-exec /usr/local/bin/aero-shell-lite "$@"

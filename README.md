@@ -1,32 +1,41 @@
-﻿# Aero OS Updates
+# Aero OS
 
-This repository hosts **Aero OS** system updates and app release assets for [`tylerdel30-dev/aero-os`](https://github.com/tylerdel30-dev/aero-os).
+**Aero Native Foundation** — UEFI kernel with glass-lite Setup.
 
-## Releases
+## Build
 
-- Tag releases as `v1.0.1`, `v1.0.2`, and so on.
-- Attach `aero-update-manifest.json` plus any updated binaries for that version.
-- App packages can be published as `.aero` release assets on the same (or a dedicated) repo.
-
-## On the device
-
-Users apply updates with:
-
-```bash
-aero update
-# or
-aero upgrade
+```powershell
+.\tools\build_foundation.ps1
 ```
 
-The updater reads the latest release, applies the manifest (`replace_only` paths, optional `pkg_upgrade`), and **never touches user files under `/home`**.
+Requires WSL with Rust nightly (for the host build tools only).
+
+## Artifacts
+
+| File | Use |
+|------|-----|
+| `out/AeroOS-Foundation-0.1.0.img` | VMware hard disk (UEFI) |
+| `out/AeroOS-Foundation-0.1.0.iso` | USB / optical UEFI media |
+
+## VMware
+
+1. New VM → **Other 64-bit**
+2. Firmware **UEFI**
+3. Attach `AeroOS-Foundation-0.1.0.img` as the hard disk
+4. Power on → bootscreen → Setup → glass desktop
+
+See [foundation/tools/run_vmware.md](foundation/tools/run_vmware.md).
 
 ## Layout
 
 | Path | Purpose |
 |------|---------|
-| `catalog.json` | Minimal app catalog pointing at this repo's releases |
-| `releases/vX.Y.Z/aero-update-manifest.json` | Per-version update manifests |
-| `.github/workflows/release.yml` | Creates a GitHub Release on `v*` tags and uploads the matching manifest |
-| `UPDATE.md` | How to publish each new version |
+| `foundation/` | Aero kernel + glass-lite Setup |
+| `tools/build_foundation.ps1` | Build script |
+| `assets/` | Branding / sounds |
+| `store/` | App catalog (`.aero`) |
+| `releases/` | Download notes |
 
-See [UPDATE.md](UPDATE.md) for the publish checklist.
+## Updates
+
+GitHub Releases: https://github.com/tylerdel30-dev/aero-os/releases

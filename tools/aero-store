@@ -1,6 +1,0 @@
-#!/bin/sh
-if [ -x /usr/local/bin/aero-store-gtk ] && command -v python3 >/dev/null 2>&1; then
-    exec /usr/local/bin/aero-store-gtk "$@"
-fi
-[ -x /usr/local/bin/aero-store.elf ] && exec /usr/local/bin/aero-store.elf "$@"
-exec /usr/local/bin/aero-store-lite "$@"
