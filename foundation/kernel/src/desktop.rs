@@ -2,6 +2,7 @@
 
 use crate::brand;
 use crate::fb::{Color, Frame};
+use crate::fs;
 use crate::input::{self, Input, Key};
 use crate::session::{Look, Session, LOOKS};
 use crate::store;
@@ -112,24 +113,19 @@ pub fn run(frame: &mut Frame, session: &mut Session) -> ! {
                     match key {
                         Key::Escape | Key::Enter | Key::Space => control_open = false,
                         Key::Left | Key::Up => {
-                            session.look_idx = session.look_idx.checked_sub(1).unwrap_or(2);
-                            session.look = LOOKS[session.look_idx].0;
+                            apply_look(session, session.look_idx.checked_sub(1).unwrap_or(2));
                         }
                         Key::Right | Key::Down => {
-                            session.look_idx = (session.look_idx + 1) % 3;
-                            session.look = LOOKS[session.look_idx].0;
+                            apply_look(session, (session.look_idx + 1) % 3);
                         }
                         Key::Char(b'1') => {
-                            session.look_idx = 0;
-                            session.look = Look::Light;
+                            apply_look(session, 0);
                         }
                         Key::Char(b'2') => {
-                            session.look_idx = 1;
-                            session.look = Look::Dark;
+                            apply_look(session, 1);
                         }
                         Key::Char(b'3') => {
-                            session.look_idx = 2;
-                            session.look = Look::Night;
+                            apply_look(session, 2);
                         }
                         _ => {}
                     }
@@ -164,16 +160,13 @@ pub fn run(frame: &mut Frame, session: &mut Session) -> ! {
                         menu_idx = 0;
                     }
                     Key::Char(b'1') => {
-                        session.look_idx = 0;
-                        session.look = Look::Light;
+                        apply_look(session, 0);
                     }
                     Key::Char(b'2') => {
-                        session.look_idx = 1;
-                        session.look = Look::Dark;
+                        apply_look(session, 1);
                     }
                     Key::Char(b'3') => {
-                        session.look_idx = 2;
-                        session.look = Look::Night;
+                        apply_look(session, 2);
                     }
                     _ => {}
                 }
@@ -251,8 +244,7 @@ fn handle_click(
             let chip_x = cx + 28 + i * 100;
             let chip_y = cy + 90;
             if ui::hit(x, y, chip_x, chip_y, 88, 32) {
-                session.look_idx = i;
-                session.look = LOOKS[i].0;
+                apply_look(session, i);
             }
         }
         if !ui::hit(x, y, cx, cy, cw, ch) {
@@ -305,8 +297,7 @@ fn handle_click(
         let chip_x = card_x + 24 + i * 100;
         let chip_y = card_y + 118;
         if ui::hit(x, y, chip_x, chip_y, 88, 28) {
-            session.look_idx = i;
-            session.look = LOOKS[i].0;
+            apply_look(session, i);
         }
     }
 }
@@ -335,12 +326,12 @@ fn activate_menu(
             *menu_open = false;
         }
         3 => {
-            session.look_idx = (session.look_idx + 1) % 3;
-            session.look = LOOKS[session.look_idx].0;
+            apply_look(session, (session.look_idx + 1) % 3);
             *menu_open = false;
         }
         4 => {
             crate::setup::run_wizard(frame, session);
+            let _ = fs::save_session(session);
             *menu_open = false;
             *about_open = false;
             *control_open = false;
@@ -349,6 +340,12 @@ fn activate_menu(
         }
         _ => {}
     }
+}
+
+fn apply_look(session: &mut Session, idx: usize) {
+    session.look_idx = idx % LOOKS.len();
+    session.look = LOOKS[session.look_idx].0;
+    let _ = fs::save_session(session);
 }
 
 fn launch_store_app(
@@ -439,7 +436,7 @@ fn draw(
     let mut hello = [0u8; 40];
     let hello_str = write_hello(&mut hello, session.display_name());
     frame.draw_text(card_x + 24, card_y + 24, hello_str, TEXT);
-    frame.draw_text(card_x + 24, card_y + 50, "Aero Foundation 0.2", TEXT_DIM);
+    frame.draw_text(card_x + 24, card_y + 50, "Aero Foundation 0.3", TEXT_DIM);
     frame.draw_text(
         card_x + 24,
         card_y + 72,
@@ -587,7 +584,7 @@ fn draw(
             ax + aw.saturating_sub(about_logo.width) / 2,
             ay + 20,
         );
-        frame.draw_text(ax + 28, ay + 130, "Aero OS Foundation 0.2", TEXT);
+        frame.draw_text(ax + 28, ay + 130, "Aero OS Foundation 0.3", TEXT);
         frame.draw_text(ax + 28, ay + 154, "Native UEFI · frosted glass · Store", TEXT_DIM);
         frame.draw_text(ax + 28, ay + 178, "Mouse + keyboard ready", TEXT_DIM);
         frame.draw_text(ax + 28, ay + 208, "Enter / click to close", TEXT_DIM);

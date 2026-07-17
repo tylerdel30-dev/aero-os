@@ -1,8 +1,10 @@
-//! Host builder: package aero-kernel.efi into a UEFI-bootable disk image / ISO.
+//! Host builder: package aero-kernel.efi + AERO/ store into a sized ESP / ISO.
 
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
+
+const VERSION: &str = "0.3.0";
 
 fn main() -> ExitCode {
     let foundation = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -45,20 +47,47 @@ fn main() -> ExitCode {
     fs::copy(&efi, work.join("EFI/BOOT/BOOTX64.EFI")).unwrap();
     fs::write(
         work.join("AERO-README.TXT"),
-        "Aero OS Foundation Preview 0.2\nNative UEFI kernel.\n",
+        format!("Aero OS Foundation {VERSION}\nNative UEFI kernel + installable AERO volume.\n"),
     )
     .unwrap();
 
-    let img = out_dir.join("AeroOS-Foundation-0.2.0.img");
-    let iso = out_dir.join("AeroOS-Foundation-0.2.0.iso");
+    // Pack store catalog into AERO/store on the ESP.
+    let aero = work.join("AERO");
+    let store_dst = aero.join("store");
+    fs::create_dir_all(&store_dst).unwrap();
+    fs::write(
+        aero.join("INSTALLED.TXT"),
+        "Boot media — run Setup Install to persist session.\n",
+    )
+    .unwrap();
 
-    // FAT ESP disk image (bootable as HDD in VMware UEFI)
-    if !make_esp_image(&work, &img) {
+    let store_src = repo.join("store");
+    if store_src.join("index.json").is_file() {
+        let _ = fs::copy(store_src.join("index.json"), store_dst.join("index.json"));
+    }
+    let apps_src = store_src.join("apps");
+    if apps_src.is_dir() {
+        for entry in fs::read_dir(&apps_src).unwrap() {
+            let entry = entry.unwrap();
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) == Some("aero") {
+                let name = path.file_name().unwrap();
+                fs::copy(&path, store_dst.join(name)).unwrap();
+            }
+        }
+    }
+
+    let img = out_dir.join(format!("AeroOS-Foundation-{VERSION}.img"));
+    let iso = out_dir.join(format!("AeroOS-Foundation-{VERSION}.iso"));
+
+    let mib = estimate_esp_mib(&work);
+    println!("==> ESP size: {mib} MiB (payload-based)");
+
+    if !make_esp_image(&work, &img, mib) {
         eprintln!("ERROR: failed to create ESP image");
         return ExitCode::FAILURE;
     }
 
-    // Also make an El Torito UEFI ISO for USB writers that expect .iso
     if !make_uefi_iso(&work, &img, &iso) {
         eprintln!("WARN: ISO creation failed (img still OK)");
     }
@@ -76,65 +105,103 @@ fn main() -> ExitCode {
     ExitCode::SUCCESS
 }
 
-fn make_esp_image(esp_tree: &Path, img: &Path) -> bool {
-    // 64 MiB FAT32 image
+fn dir_size(path: &Path) -> u64 {
+    let mut total = 0u64;
+    let walker = match fs::read_dir(path) {
+        Ok(w) => w,
+        Err(_) => return 0,
+    };
+    for entry in walker.flatten() {
+        let p = entry.path();
+        if p.is_dir() {
+            total = total.saturating_add(dir_size(&p));
+        } else if let Ok(meta) = entry.metadata() {
+            total = total.saturating_add(meta.len());
+        }
+    }
+    total
+}
+
+fn estimate_esp_mib(esp_tree: &Path) -> u64 {
+    let bytes = dir_size(esp_tree);
+    // FAT overhead + headroom for session.json writes after install.
+    let need = bytes.saturating_add(2 * 1024 * 1024);
+    let mib = (need + 1024 * 1024 - 1) / (1024 * 1024);
+    mib.clamp(8, 32)
+}
+
+fn make_esp_image(esp_tree: &Path, img: &Path, mib: u64) -> bool {
     let _ = fs::remove_file(img);
     let status = Command::new("dd")
         .args([
             "if=/dev/zero",
             &format!("of={}", img.display()),
             "bs=1M",
-            "count=64",
+            &format!("count={mib}"),
             "status=none",
         ])
         .status();
     if !status.map(|s| s.success()).unwrap_or(false) {
         return false;
     }
+    // Let mkfs pick FAT12/16/32 based on size (avoids FAT32 33MiB minimum).
     if !Command::new("mkfs.vfat")
-        .args(["-F", "32", "-n", "AERO_FOUND", &img.display().to_string()])
+        .args(["-n", "AERO_OS", &img.display().to_string()])
         .status()
         .map(|s| s.success())
         .unwrap_or(false)
     {
         return false;
     }
-    // mcopy files into image
+
+    let img_s = img.display().to_string();
     let boot = esp_tree.join("EFI/BOOT/BOOTX64.EFI");
-    let ok = Command::new("mmd")
-        .args(["-i", &img.display().to_string(), "::/EFI"])
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
-        && Command::new("mmd")
-            .args(["-i", &img.display().to_string(), "::/EFI/BOOT"])
+
+    let mut ok = mmd(&img_s, "::/EFI")
+        && mmd(&img_s, "::/EFI/BOOT")
+        && mcopy(
+            &img_s,
+            &boot.display().to_string(),
+            "::/EFI/BOOT/BOOTX64.EFI",
+        );
+
+    let _ = mcopy(
+        &img_s,
+        &esp_tree.join("AERO-README.TXT").display().to_string(),
+        "::/AERO-README.TXT",
+    );
+
+    // Recursive copy of AERO/ tree via mcopy -s
+    let aero = esp_tree.join("AERO");
+    if aero.is_dir() {
+        ok = Command::new("mcopy")
+            .args(["-i", &img_s, "-s", &aero.display().to_string(), "::/AERO"])
             .status()
             .map(|s| s.success())
             .unwrap_or(false)
-        && Command::new("mcopy")
-            .args([
-                "-i",
-                &img.display().to_string(),
-                &boot.display().to_string(),
-                "::/EFI/BOOT/BOOTX64.EFI",
-            ])
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false);
-    let _ = Command::new("mcopy")
-        .args([
-            "-i",
-            &img.display().to_string(),
-            &esp_tree.join("AERO-README.TXT").display().to_string(),
-            "::/AERO-README.TXT",
-        ])
-        .status();
+            && ok;
+    }
     ok
+}
+
+fn mmd(img: &str, path: &str) -> bool {
+    Command::new("mmd")
+        .args(["-i", img, path])
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+fn mcopy(img: &str, src: &str, dst: &str) -> bool {
+    Command::new("mcopy")
+        .args(["-i", img, src, dst])
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
 }
 
 fn make_uefi_iso(esp_tree: &Path, esp_img: &Path, iso: &Path) -> bool {
     let _ = fs::remove_file(iso);
-    // xorriso El Torito UEFI from the ESP image + ISO9660 tree
     Command::new("xorriso")
         .args([
             "-as",
@@ -142,7 +209,7 @@ fn make_uefi_iso(esp_tree: &Path, esp_img: &Path, iso: &Path) -> bool {
             "-R",
             "-J",
             "-V",
-            "AERO_FOUND_01",
+            "AERO_OS",
             "-o",
             &iso.display().to_string(),
             "-e",
@@ -164,14 +231,6 @@ fn sha256(path: &Path) {
     if let Ok(out) = Command::new("sha256sum").arg(path).output() {
         if out.status.success() {
             let text = String::from_utf8_lossy(&out.stdout);
-            let _ = fs::write(
-                path.with_extension(format!(
-                    "{}.sha256",
-                    path.extension().and_then(|e| e.to_str()).unwrap_or("bin")
-                )),
-                text.as_bytes(),
-            );
-            // simpler: path.sha256
             let sha = PathBuf::from(format!("{}.sha256", path.display()));
             let _ = fs::write(&sha, text.as_bytes());
             print!("{text}");

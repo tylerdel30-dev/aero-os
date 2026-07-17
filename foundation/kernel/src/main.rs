@@ -6,6 +6,7 @@ extern crate alloc;
 mod brand;
 mod desktop;
 mod fb;
+mod fs;
 mod input;
 mod session;
 mod setup;

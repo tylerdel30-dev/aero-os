@@ -1,8 +1,9 @@
-//! Aero Setup: boot splash → wizard → desktop.
+//! Aero Setup: boot splash → wizard / restore → install → desktop.
 
 use crate::brand;
 use crate::desktop;
 use crate::fb::{Color, Frame};
+use crate::fs;
 use crate::input::{self, Key};
 use crate::session::{Look, Session, LOOKS, REGIONS};
 use crate::ui::{self, TEXT, TEXT_DIM};
@@ -14,10 +15,18 @@ enum Page {
     Account,
     Region,
     Appearance,
-    Done,
+    Install,
+    Installed,
 }
 
 pub fn run(frame: &mut Frame) -> ! {
+    // Restore persisted session when present (skip wizard).
+    if let Some(session) = fs::load_session() {
+        show_boot_to_setup(frame, session.look);
+        let mut session = session;
+        desktop::run(frame, &mut session);
+    }
+
     let mut session = Session::new();
     show_boot_to_setup(frame, session.look);
     run_wizard(frame, &mut session);
@@ -27,9 +36,11 @@ pub fn run(frame: &mut Frame) -> ! {
 /// Interactive setup wizard (also reachable from the Start menu).
 pub fn run_wizard(frame: &mut Frame, session: &mut Session) {
     let mut page = Page::Hello;
+    let mut install_msg = [0u8; 64];
+    let mut install_msg_len = 0usize;
 
     loop {
-        draw(frame, page, session);
+        draw(frame, page, session, &install_msg[..install_msg_len]);
         let key = input::wait_key();
 
         match page {
@@ -82,16 +93,32 @@ pub fn run_wizard(frame: &mut Frame, session: &mut Session) {
                     session.look_idx = (session.look_idx + 1) % LOOKS.len();
                     session.look = LOOKS[session.look_idx].0;
                 }
-                Key::Enter | Key::Space => page = Page::Done,
+                Key::Enter | Key::Space => page = Page::Install,
                 Key::Escape => page = Page::Region,
                 _ => {}
             },
-            Page::Done => {
-                if matches!(key, Key::Enter | Key::Space) {
+            Page::Install => match key {
+                Key::Enter => {
+                    let result = fs::install_aero(session);
+                    let msg = if result.success() {
+                        "Installed. Session saved."
+                    } else {
+                        "Install failed — desktop only."
+                    };
+                    install_msg_len = msg.len().min(install_msg.len());
+                    install_msg[..install_msg_len].copy_from_slice(&msg.as_bytes()[..install_msg_len]);
+                    page = Page::Installed;
+                }
+                Key::Space => {
+                    let _ = fs::save_session(session);
                     return;
                 }
-                if matches!(key, Key::Escape) {
-                    page = Page::Appearance;
+                Key::Escape => page = Page::Appearance,
+                _ => {}
+            },
+            Page::Installed => {
+                if matches!(key, Key::Enter | Key::Space | Key::Escape) {
+                    return;
                 }
             }
         }
@@ -199,11 +226,11 @@ fn page_index(page: Page) -> usize {
         Page::Account => 1,
         Page::Region => 2,
         Page::Appearance => 3,
-        Page::Done => 4,
+        Page::Install | Page::Installed => 4,
     }
 }
 
-fn draw(frame: &mut Frame, page: Page, session: &Session) {
+fn draw(frame: &mut Frame, page: Page, session: &Session, install_msg: &[u8]) {
     paint_wallpaper(frame, session.look);
 
     let h = frame.height();
@@ -220,7 +247,7 @@ fn draw(frame: &mut Frame, page: Page, session: &Session) {
     frame.draw_text(
         card_x + 28,
         card_y + 18 + logo.height + 28,
-        "Foundation Preview 0.2",
+        "Foundation 0.3",
         TEXT_DIM,
     );
 
@@ -241,7 +268,7 @@ fn draw(frame: &mut Frame, page: Page, session: &Session) {
             frame.draw_text(
                 card_x + 28,
                 body_y + 48,
-                "A few quick steps, then your desktop.",
+                "Set up, then install to this disk.",
                 TEXT_DIM,
             );
             frame.draw_text(card_x + 28, body_y + 78, "Press Enter to continue.", TEXT_DIM);
@@ -320,15 +347,34 @@ fn draw(frame: &mut Frame, page: Page, session: &Session) {
                 );
             }
         }
-        Page::Done => {
-            frame.draw_text(card_x + 28, body_y, "You're Ready", TEXT);
-            frame.draw_text(card_x + 28, body_y + 28, "Enter opens your desktop.", TEXT_DIM);
-            frame.draw_text(card_x + 28, body_y + 60, "Name:", TEXT_DIM);
-            frame.draw_text(card_x + 100, body_y + 60, session.display_name(), TEXT);
-            frame.draw_text(card_x + 28, body_y + 84, "Region:", TEXT_DIM);
-            frame.draw_text(card_x + 100, body_y + 84, session.region_name(), TEXT);
-            frame.draw_text(card_x + 28, body_y + 108, "Look:", TEXT_DIM);
-            frame.draw_text(card_x + 100, body_y + 108, session.look_name(), TEXT);
+        Page::Install => {
+            frame.draw_text(card_x + 28, body_y, "Install Aero", TEXT);
+            frame.draw_text(card_x + 28, body_y + 28, "Writes AERO/session.json", TEXT_DIM);
+            frame.draw_text(card_x + 28, body_y + 48, "to this disk (and others).", TEXT_DIM);
+            frame.draw_text(card_x + 28, body_y + 76, "Name:", TEXT_DIM);
+            frame.draw_text(card_x + 100, body_y + 76, session.display_name(), TEXT);
+            frame.draw_text(card_x + 28, body_y + 100, "Region:", TEXT_DIM);
+            frame.draw_text(card_x + 100, body_y + 100, session.region_name(), TEXT);
+            frame.draw_text(card_x + 28, body_y + 124, "Look:", TEXT_DIM);
+            frame.draw_text(card_x + 100, body_y + 124, session.look_name(), TEXT);
+            frame.draw_text(card_x + 28, body_y + 156, "Enter = Install", TEXT_DIM);
+            frame.draw_text(card_x + 28, body_y + 176, "Space = Desktop only", TEXT_DIM);
+            ui::draw_button(
+                frame,
+                card_x + card_w.saturating_sub(180) / 2,
+                card_y + card_h.saturating_sub(70),
+                180,
+                40,
+                "Install Aero",
+                true,
+            );
+        }
+        Page::Installed => {
+            frame.draw_text(card_x + 28, body_y, "Install Complete", TEXT);
+            let msg = core::str::from_utf8(install_msg).unwrap_or("Done.");
+            frame.draw_text(card_x + 28, body_y + 28, msg, TEXT_DIM);
+            frame.draw_text(card_x + 28, body_y + 56, "Reboot keeps your settings.", TEXT_DIM);
+            frame.draw_text(card_x + 28, body_y + 84, "Enter opens the desktop.", TEXT_DIM);
             ui::draw_button(
                 frame,
                 card_x + card_w.saturating_sub(180) / 2,
@@ -344,7 +390,7 @@ fn draw(frame: &mut Frame, page: Page, session: &Session) {
     frame.draw_text(
         16,
         h.saturating_sub(28),
-        "Aero Native Foundation",
+        "Aero Native Foundation 0.3",
         Color::rgba(180, 210, 240, 140),
     );
 }

@@ -6,15 +6,15 @@
 
 | Version | File | Notes |
 |--------|------|--------|
-| Foundation 0.2 | `AeroOS-Foundation-0.2.0.img` | UEFI disk — frosted glass desktop + Store |
-| Foundation 0.2 | `AeroOS-Foundation-0.2.0.iso` | UEFI ISO |
+| Foundation 0.3 | `AeroOS-Foundation-0.3.0.img` | UEFI disk — install + persistent session |
+| Foundation 0.3 | `AeroOS-Foundation-0.3.0.iso` | UEFI ISO (payload-sized ESP) |
 
 SHA256:
 
 | File | Hash |
 |------|------|
-| `.img` | `01a69e5f7fc863513ffe79f837d2a892bf03bc2d70c6d0d3340293caf431f0aa` |
-| `.iso` | `e79f212c26dd86c3c70263b6b975b37eeed3e8443d0d6ca323cb259ff43eea01` |
+| `.img` | `521359262e87f5cd7250c544d870fa057d100cd71a72c47cf64a048a89f3f478` |
+| `.iso` | `b510717574269f2ba57b1a50cfff8b33bbc2c23adc046c7df07814dc93f05668` |
 
 Build: `.\tools\build_foundation.ps1`
 
@@ -24,10 +24,3 @@ Guide: [foundation/tools/run_vmware.md](../foundation/tools/run_vmware.md)
 ## Writing USB
 
 Prefer DD / image mode with the `.iso` or `.img`, or `.\write_usb.ps1` for the ISO.
-
-## Store
-
-- `store/index.json` — Foundation app catalog
-- `store/apps/*.aero` — app manifests
-- `examples/hello-aero/hello.aero` — sample bundle
-- `catalog.json` — public catalog mirror
