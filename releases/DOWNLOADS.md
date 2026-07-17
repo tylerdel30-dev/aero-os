@@ -6,21 +6,14 @@
 
 | Version | File | Notes |
 |--------|------|--------|
-| Foundation 0.3 | `AeroOS-Foundation-0.3.0.img` | UEFI disk — install + persistent session |
-| Foundation 0.3 | `AeroOS-Foundation-0.3.0.iso` | UEFI ISO (payload-sized ESP) |
+| Kernel 0.4 | `AeroOS-Foundation-0.4.0.img` | ExitBootServices + glass desktop + FAT |
+| Kernel 0.4 | `AeroOS-Foundation-0.4.0.iso` | UEFI ISO |
 
 SHA256:
 
 | File | Hash |
 |------|------|
-| `.img` | `521359262e87f5cd7250c544d870fa057d100cd71a72c47cf64a048a89f3f478` |
-| `.iso` | `b510717574269f2ba57b1a50cfff8b33bbc2c23adc046c7df07814dc93f05668` |
+| `.img` | `7dda95a22202efc2aca2224d6893d350bf060d580547b34aaa72a08746e23081` |
+| `.iso` | `b75b6e714ab0ea4a3d1332574f01fe6fc093ce19703f0f3466d61ec4f234ae38` |
 
 Build: `.\tools\build_foundation.ps1`
-
-VMware: Other 64-bit, UEFI, attach the `.img` as HDD.  
-Guide: [foundation/tools/run_vmware.md](../foundation/tools/run_vmware.md)
-
-## Writing USB
-
-Prefer DD / image mode with the `.iso` or `.img`, or `.\write_usb.ps1` for the ISO.

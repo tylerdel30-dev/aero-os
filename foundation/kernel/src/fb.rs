@@ -57,6 +57,22 @@ impl Frame {
         self.height
     }
 
+    pub fn stride(&self) -> usize {
+        self.stride
+    }
+
+    pub fn len_bytes(&self) -> usize {
+        self.len
+    }
+
+    pub fn as_mut_ptr(&mut self) -> *mut u8 {
+        self.ptr
+    }
+
+    pub fn pixel_format(&self) -> PixelFormat {
+        self.format
+    }
+
     pub fn clear(&mut self, c: Color) {
         for y in 0..self.height {
             for x in 0..self.width {

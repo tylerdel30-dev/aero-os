@@ -1,9 +1,13 @@
-//! UEFI keyboard + optional mouse pointer.
+//! Unified input: UEFI before ExitBootServices, PS/2 after.
 
 use uefi::boot::{self, ScopedProtocol};
 use uefi::proto::console::pointer::Pointer;
 use uefi::proto::console::text::{Key as UefiKey, ScanCode};
 use uefi::system;
+
+use crate::arch::idt;
+use crate::handoff;
+use crate::ps2;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Key {
@@ -39,9 +43,13 @@ pub struct Input {
 
 impl Input {
     pub fn new(width: usize, height: usize) -> Self {
-        let pointer = boot::get_handle_for_protocol::<Pointer>()
-            .ok()
-            .and_then(|h| boot::open_protocol_exclusive::<Pointer>(h).ok());
+        let pointer = if handoff::is_kernel_mode() {
+            None
+        } else {
+            boot::get_handle_for_protocol::<Pointer>()
+                .ok()
+                .and_then(|h| boot::open_protocol_exclusive::<Pointer>(h).ok())
+        };
         Self {
             pointer,
             mouse_x: (width / 2) as isize,
@@ -53,6 +61,9 @@ impl Input {
     }
 
     pub fn poll_key() -> Option<Key> {
+        if handoff::is_kernel_mode() {
+            return ps2::poll_key();
+        }
         system::with_stdin(|stdin| {
             let key = stdin.read_key().ok().flatten()?;
             Some(match key {
@@ -78,8 +89,16 @@ impl Input {
     }
 
     pub fn poll_pointer(&mut self) -> PointerState {
+        if handoff::is_kernel_mode() || self.pointer.is_none() {
+            return PointerState {
+                x: self.mouse_x as usize,
+                y: self.mouse_y as usize,
+                left: false,
+                left_pressed: false,
+                available: false,
+            };
+        }
         let mut left = false;
-        let available = self.pointer.is_some();
         if let Some(ptr) = self.pointer.as_mut() {
             if let Ok(Some(state)) = ptr.read_state() {
                 self.mouse_x += state.relative_movement[0] as isize / 2;
@@ -96,7 +115,7 @@ impl Input {
             y: self.mouse_y as usize,
             left,
             left_pressed,
-            available,
+            available: true,
         }
     }
 }
@@ -110,7 +129,7 @@ pub fn wait_key() -> Key {
         if let Some(k) = poll_key() {
             return k;
         }
-        boot::stall(10_000);
+        stall_us(10_000);
     }
 }
 
@@ -120,7 +139,15 @@ pub fn wait_key_timeout(timeout_us: usize) -> Option<Key> {
         if let Some(k) = poll_key() {
             return Some(k);
         }
-        boot::stall(10_000);
+        stall_us(10_000);
     }
     None
+}
+
+pub fn stall_us(us: usize) {
+    if handoff::is_kernel_mode() {
+        idt::sleep_ms((us as u64 / 1000).max(1));
+    } else {
+        boot::stall(us);
+    }
 }

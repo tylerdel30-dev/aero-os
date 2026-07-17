@@ -5,7 +5,7 @@
 
 .EXAMPLE
     .\publish_iso.ps1
-    .\publish_iso.ps1 -Tag v0.3.0
+    .\publish_iso.ps1 -Tag v0.4.0
 #>
 param(
     [string]$Tag = "",
@@ -39,7 +39,7 @@ if ([string]::IsNullOrWhiteSpace($Tag)) {
     if ($match.Success) {
         $Tag = "v$($match.Groups[1].Value)"
     } else {
-        $Tag = "v0.3.0"
+        $Tag = "v0.4.0"
     }
 }
 

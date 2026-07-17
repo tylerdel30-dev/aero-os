@@ -20,8 +20,8 @@ $distro = "Ubuntu"
 & wsl -d $distro -u root -- bash -lc "sed -i 's/\r$//' '$wslRoot/foundation/build-all.sh' '$wslRoot/tools/build_foundation_iso.sh'; bash '$wslRoot/foundation/build-all.sh'"
 if ($LASTEXITCODE -ne 0) { throw "Foundation build failed" }
 
-$img = Join-Path $Root "out\AeroOS-Foundation-0.3.0.img"
+$img = Join-Path $Root "out\AeroOS-Foundation-0.4.0.img"
 if (-not (Test-Path $img)) { throw "Missing $img" }
 Write-Host "OK: $img" -ForegroundColor Green
-$iso = Join-Path $Root "out\AeroOS-Foundation-0.3.0.iso"
+$iso = Join-Path $Root "out\AeroOS-Foundation-0.4.0.iso"
 if (Test-Path $iso) { Write-Host "OK: $iso" -ForegroundColor Green }

@@ -4,7 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 
-const VERSION: &str = "0.3.0";
+const VERSION: &str = "0.4.0";
 
 fn main() -> ExitCode {
     let foundation = PathBuf::from(env!("CARGO_MANIFEST_DIR"))

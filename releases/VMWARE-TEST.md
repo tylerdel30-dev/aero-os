@@ -1,16 +1,14 @@
-# VMware smoke-test — Aero Foundation 0.3
+# VMware smoke-test — Aero Kernel 0.4
 
 ## Before boot
 - [ ] `.\tools\build_foundation.ps1`
-- [ ] `out/AeroOS-Foundation-0.3.0.img`
+- [ ] `out/AeroOS-Foundation-0.4.0.img`
 - [ ] VM: Other 64-bit, UEFI ON
-- [ ] Attach `.img` as hard disk
 
 ## Boot
-- [ ] Metallic Aero bootscreen with logo overlay
-- [ ] Logo shrinks into Setup card
-- [ ] Setup: Hello → Name → Region → Appearance → Install
-- [ ] Install writes `AERO/session.json`
-- [ ] Desktop: glass taskbar, Start, Store, clock
-- [ ] Reboot restores name/look (skips wizard)
-- [ ] Space opens Start; 1/2/3 changes look (persists)
+- [ ] Splash → Setup or restored session
+- [ ] Transitions to kernel mode (desktop still draws)
+- [ ] PS/2 keyboard works after ExitBootServices
+- [ ] Start → Files lists AERO/ (if ATA/FAT readable)
+- [ ] Store / About / Control Center
+- [ ] Install persists session across reboot

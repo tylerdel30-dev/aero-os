@@ -1,6 +1,6 @@
 # Aero OS
 
-**Aero Native Foundation 0.3** — UEFI kernel with frosted glass desktop, install, and persistence.
+**Aero Native Kernel 0.4** — ExitBootServices, glass desktop, FAT Files, install + persistence.
 
 ## Build
 
@@ -8,37 +8,25 @@
 .\tools\build_foundation.ps1
 ```
 
-Requires WSL with Rust nightly (for the host build tools only).
+Requires WSL with Rust nightly.
 
 ## Artifacts
 
 | File | Use |
 |------|-----|
-| `out/AeroOS-Foundation-0.3.0.img` | VMware hard disk (UEFI) |
-| `out/AeroOS-Foundation-0.3.0.iso` | USB / optical UEFI media |
+| `out/AeroOS-Foundation-0.4.0.img` | VMware hard disk (UEFI) |
+| `out/AeroOS-Foundation-0.4.0.iso` | USB / optical UEFI media |
 
-ESP size is payload-based (not a padded 64 MB stub).
+## Boot flow
+
+1. UEFI splash + Setup / restore session
+2. **ExitBootServices** → Aero kernel (GDT/IDT/PIC/PIT + PS/2)
+3. Glass desktop (Start, Store, Files, Control Center)
 
 ## VMware
 
-1. New VM → **Other 64-bit**
-2. Firmware **UEFI**
-3. Attach `AeroOS-Foundation-0.3.0.img` as the hard disk
-4. Power on → bootscreen → Setup → **Install Aero** → desktop
-5. Reboot: settings restore from `AERO/session.json`
+1. Other 64-bit, UEFI
+2. Attach `AeroOS-Foundation-0.4.0.img`
+3. Install in Setup, then reboot to verify persistence
 
-See [foundation/tools/run_vmware.md](foundation/tools/run_vmware.md).
-
-## Layout
-
-| Path | Purpose |
-|------|---------|
-| `foundation/` | Aero kernel + glass desktop + installer |
-| `store/` | `.aero` catalog (packed into `AERO/store`) |
-| `tools/build_foundation.ps1` | Build script |
-| `assets/` | Branding / sounds |
-| `releases/` | Download notes |
-
-## Updates
-
-GitHub Releases: https://github.com/tylerdel30-dev/aero-os/releases
+GitHub: https://github.com/tylerdel30-dev/aero-os/releases

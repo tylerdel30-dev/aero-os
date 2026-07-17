@@ -2,12 +2,12 @@
 
 use crate::brand;
 use crate::fb::{Color, Frame};
+use crate::files::{self, FilesState};
 use crate::fs;
 use crate::input::{self, Input, Key};
 use crate::session::{Look, Session, LOOKS};
 use crate::store;
 use crate::ui::{self, TEXT, TEXT_DIM};
-use uefi::boot;
 use uefi::runtime;
 
 const TASKBAR_H: usize = 60;
@@ -15,6 +15,7 @@ const START_SIZE: usize = 44;
 
 const MENU_ITEMS: &[&str] = &[
     "Aero Store",
+    "Files",
     "About Aero",
     "Control Center",
     "Change Look",
@@ -30,6 +31,7 @@ pub fn run(frame: &mut Frame, session: &mut Session) -> ! {
     let mut store_open = false;
     let mut store_idx: usize = 0;
     let mut hello_open = false;
+    let mut files = FilesState::new();
     let mut tick: u32 = 0;
     let mut time_buf = [b'0'; 5];
     update_clock(&mut time_buf);
@@ -46,6 +48,7 @@ pub fn run(frame: &mut Frame, session: &mut Session) -> ! {
             store_open,
             store_idx,
             hello_open,
+            &files,
             &time_buf,
             tick,
             ptr.x,
@@ -66,6 +69,7 @@ pub fn run(frame: &mut Frame, session: &mut Session) -> ! {
                 &mut store_open,
                 &mut store_idx,
                 &mut hello_open,
+                &mut files,
             );
         }
 
@@ -74,6 +78,26 @@ pub fn run(frame: &mut Frame, session: &mut Session) -> ! {
                 if hello_open {
                     if matches!(key, Key::Enter | Key::Escape | Key::Space) {
                         hello_open = false;
+                    }
+                    continue;
+                }
+                if files.open {
+                    match key {
+                        Key::Escape => files.open = false,
+                        Key::Up | Key::Left => {
+                            if !files.entries.is_empty() {
+                                files.idx = files
+                                    .idx
+                                    .checked_sub(1)
+                                    .unwrap_or(files.entries.len() - 1);
+                            }
+                        }
+                        Key::Down | Key::Right => {
+                            if !files.entries.is_empty() {
+                                files.idx = (files.idx + 1) % files.entries.len();
+                            }
+                        }
+                        _ => {}
                     }
                     continue;
                 }
@@ -153,6 +177,7 @@ pub fn run(frame: &mut Frame, session: &mut Session) -> ! {
                             &mut store_open,
                             &mut menu_open,
                             &mut hello_open,
+                            &mut files,
                         );
                     }
                     Key::Enter if !menu_open => {
@@ -178,7 +203,7 @@ pub fn run(frame: &mut Frame, session: &mut Session) -> ! {
                 }
             }
         }
-        boot::stall(8_000);
+        input::stall_us(8_000);
     }
 }
 
@@ -194,6 +219,7 @@ fn handle_click(
     store_open: &mut bool,
     store_idx: &mut usize,
     hello_open: &mut bool,
+    files: &mut FilesState,
 ) {
     let w = frame.width();
     let h = frame.height();
@@ -270,6 +296,7 @@ fn handle_click(
                     store_open,
                     menu_open,
                     hello_open,
+                    files,
                 );
                 return;
             }
@@ -311,6 +338,7 @@ fn activate_menu(
     store_open: &mut bool,
     menu_open: &mut bool,
     hello_open: &mut bool,
+    files: &mut FilesState,
 ) {
     match idx {
         0 => {
@@ -318,25 +346,33 @@ fn activate_menu(
             *menu_open = false;
         }
         1 => {
-            *about_open = true;
+            files.open_panel();
             *menu_open = false;
         }
         2 => {
-            *control_open = true;
+            *about_open = true;
             *menu_open = false;
         }
         3 => {
-            apply_look(session, (session.look_idx + 1) % 3);
+            *control_open = true;
             *menu_open = false;
         }
         4 => {
-            crate::setup::run_wizard(frame, session);
-            let _ = fs::save_session(session);
+            apply_look(session, (session.look_idx + 1) % 3);
+            *menu_open = false;
+        }
+        5 => {
+            // Setup again only works fully before ExitBootServices; after exit, re-run is limited.
+            if !crate::handoff::is_kernel_mode() {
+                crate::setup::run_wizard(frame, session);
+                let _ = fs::save_session(session);
+            }
             *menu_open = false;
             *about_open = false;
             *control_open = false;
             *store_open = false;
             *hello_open = false;
+            files.open = false;
         }
         _ => {}
     }
@@ -345,7 +381,11 @@ fn activate_menu(
 fn apply_look(session: &mut Session, idx: usize) {
     session.look_idx = idx % LOOKS.len();
     session.look = LOOKS[session.look_idx].0;
-    let _ = fs::save_session(session);
+    if !crate::handoff::is_kernel_mode() {
+        let _ = fs::save_session(session);
+    } else {
+        let _ = crate::fat::save_session_file(session);
+    }
 }
 
 fn launch_store_app(
@@ -416,6 +456,7 @@ fn draw(
     store_open: bool,
     store_idx: usize,
     hello_open: bool,
+    files: &FilesState,
     time_buf: &[u8; 5],
     tick: u32,
     mx: usize,
@@ -436,11 +477,13 @@ fn draw(
     let mut hello = [0u8; 40];
     let hello_str = write_hello(&mut hello, session.display_name());
     frame.draw_text(card_x + 24, card_y + 24, hello_str, TEXT);
-    frame.draw_text(card_x + 24, card_y + 50, "Aero Foundation 0.3", TEXT_DIM);
+    frame.draw_text(card_x + 24, card_y + 50, "Aero OS Kernel 0.4", TEXT_DIM);
     frame.draw_text(
         card_x + 24,
         card_y + 72,
-        if mouse_ok {
+        if crate::handoff::is_kernel_mode() {
+            "Kernel mode · PS/2 keyboard"
+        } else if mouse_ok {
             "Click Start · Store in menu"
         } else {
             "Space = Start · Store in menu"
@@ -584,9 +627,9 @@ fn draw(
             ax + aw.saturating_sub(about_logo.width) / 2,
             ay + 20,
         );
-        frame.draw_text(ax + 28, ay + 130, "Aero OS Foundation 0.3", TEXT);
-        frame.draw_text(ax + 28, ay + 154, "Native UEFI · frosted glass · Store", TEXT_DIM);
-        frame.draw_text(ax + 28, ay + 178, "Mouse + keyboard ready", TEXT_DIM);
+        frame.draw_text(ax + 28, ay + 130, "Aero OS Kernel 0.4", TEXT);
+        frame.draw_text(ax + 28, ay + 154, "ExitBootServices · glass desktop", TEXT_DIM);
+        frame.draw_text(ax + 28, ay + 178, "PS/2 keyboard · FAT Files", TEXT_DIM);
         frame.draw_text(ax + 28, ay + 208, "Enter / click to close", TEXT_DIM);
     }
 
@@ -601,6 +644,8 @@ fn draw(
         frame.draw_text(ax + 28, ay + 88, "id: dev.aero.hello", TEXT_DIM);
         frame.draw_text(ax + 28, ay + 120, "Enter / click to close", TEXT_DIM);
     }
+
+    files::draw(frame, files);
 
     if mouse_ok {
         ui::draw_cursor(frame, mx, my);

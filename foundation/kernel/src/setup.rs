@@ -20,17 +20,34 @@ enum Page {
 }
 
 pub fn run(frame: &mut Frame) -> ! {
-    // Restore persisted session when present (skip wizard).
-    if let Some(session) = fs::load_session() {
-        show_boot_to_setup(frame, session.look);
-        let mut session = session;
-        desktop::run(frame, &mut session);
-    }
+    crate::heap::init();
 
-    let mut session = Session::new();
-    show_boot_to_setup(frame, session.look);
-    run_wizard(frame, &mut session);
+    // Restore persisted session when present (skip wizard) — still in UEFI.
+    let mut session = if let Some(s) = fs::load_session() {
+        show_boot_to_setup(frame, s.look);
+        s
+    } else {
+        let mut session = Session::new();
+        show_boot_to_setup(frame, session.look);
+        run_wizard(frame, &mut session);
+        session
+    };
+
+    // Drop into bare-metal Aero kernel, then desktop.
+    enter_kernel(frame);
     desktop::run(frame, &mut session);
+}
+
+fn enter_kernel(frame: &mut Frame) {
+    let ptr = frame.as_mut_ptr();
+    let len = frame.len_bytes();
+    let w = frame.width();
+    let h = frame.height();
+    let stride = frame.stride();
+    let format = frame.pixel_format();
+    unsafe {
+        crate::kernel::enter(ptr, len, w, h, stride, format);
+    }
 }
 
 /// Interactive setup wizard (also reachable from the Start menu).

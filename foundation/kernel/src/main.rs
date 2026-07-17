@@ -1,13 +1,22 @@
 #![no_std]
 #![no_main]
+#![feature(abi_x86_interrupt)]
 
 extern crate alloc;
 
+mod arch;
 mod brand;
 mod desktop;
+mod fat;
 mod fb;
+mod files;
 mod fs;
+mod handoff;
+mod heap;
 mod input;
+mod kernel;
+mod mem;
+mod ps2;
 mod session;
 mod setup;
 mod store;
@@ -19,6 +28,7 @@ use uefi::proto::console::gop::GraphicsOutput;
 
 #[entry]
 fn main() -> Status {
+    crate::heap::init();
     if uefi::helpers::init().is_err() {
         return Status::ABORTED;
     }
