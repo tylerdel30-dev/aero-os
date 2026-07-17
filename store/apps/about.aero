@@ -1,0 +1,9 @@
+{
+  "format": 1,
+  "id": "dev.aero.about",
+  "name": "About Aero",
+  "version": "0.2.0",
+  "kind": "foundation-builtin",
+  "entry": "about",
+  "description": "System about panel for Aero Foundation"
+}

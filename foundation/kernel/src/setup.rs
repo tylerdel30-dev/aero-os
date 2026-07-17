@@ -220,7 +220,7 @@ fn draw(frame: &mut Frame, page: Page, session: &Session) {
     frame.draw_text(
         card_x + 28,
         card_y + 18 + logo.height + 28,
-        "Foundation Preview 0.1",
+        "Foundation Preview 0.2",
         TEXT_DIM,
     );
 

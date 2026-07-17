@@ -45,12 +45,12 @@ fn main() -> ExitCode {
     fs::copy(&efi, work.join("EFI/BOOT/BOOTX64.EFI")).unwrap();
     fs::write(
         work.join("AERO-README.TXT"),
-        "Aero OS Foundation Preview 0.1\nNative UEFI kernel.\n",
+        "Aero OS Foundation Preview 0.2\nNative UEFI kernel.\n",
     )
     .unwrap();
 
-    let img = out_dir.join("AeroOS-Foundation-0.1.0.img");
-    let iso = out_dir.join("AeroOS-Foundation-0.1.0.iso");
+    let img = out_dir.join("AeroOS-Foundation-0.2.0.img");
+    let iso = out_dir.join("AeroOS-Foundation-0.2.0.iso");
 
     // FAT ESP disk image (bootable as HDD in VMware UEFI)
     if !make_esp_image(&work, &img) {

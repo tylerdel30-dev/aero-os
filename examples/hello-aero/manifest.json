@@ -1,0 +1,8 @@
+{
+  "id": "dev.aero.hello",
+  "name": "Hello Aero",
+  "version": "1.0.0",
+  "exec": "hello.aero",
+  "icon": "icon.png",
+  "description": "Example Aero OS app bundle — proves the .aero format works on Foundation"
+}

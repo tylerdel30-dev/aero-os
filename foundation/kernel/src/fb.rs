@@ -192,6 +192,80 @@ impl Frame {
         }
     }
 
+    /// Frosted glass: average nearby pixels, then tint.
+    pub fn fill_glass_round_rect(
+        &mut self,
+        x: usize,
+        y: usize,
+        w: usize,
+        h: usize,
+        radius: usize,
+        tint: Color,
+    ) {
+        let r2 = radius * radius;
+        let samples: [(isize, isize); 5] = [(0, 0), (-5, 0), (5, 0), (0, -5), (0, 5)];
+        for yy in y..y.saturating_add(h).min(self.height) {
+            for xx in x..x.saturating_add(w).min(self.width) {
+                let lx = xx.saturating_sub(x);
+                let ly = yy.saturating_sub(y);
+                let in_h = lx >= radius && lx < w.saturating_sub(radius);
+                let in_v = ly >= radius && ly < h.saturating_sub(radius);
+                let corner = if radius == 0 {
+                    true
+                } else if lx < radius && ly < radius {
+                    let dx = radius - lx;
+                    let dy = radius - ly;
+                    dx * dx + dy * dy <= r2
+                } else if lx >= w.saturating_sub(radius) && ly < radius {
+                    let dx = lx - (w - radius);
+                    let dy = radius - ly;
+                    dx * dx + dy * dy <= r2
+                } else if lx < radius && ly >= h.saturating_sub(radius) {
+                    let dx = radius - lx;
+                    let dy = ly - (h - radius);
+                    dx * dx + dy * dy <= r2
+                } else if lx >= w.saturating_sub(radius) && ly >= h.saturating_sub(radius) {
+                    let dx = lx - (w - radius);
+                    let dy = ly - (h - radius);
+                    dx * dx + dy * dy <= r2
+                } else {
+                    true
+                };
+                if !(in_h || in_v || corner) {
+                    continue;
+                }
+
+                let mut sr = 0u32;
+                let mut sg = 0u32;
+                let mut sb = 0u32;
+                let mut n = 0u32;
+                for (dx, dy) in samples {
+                    let sx = (xx as isize + dx).clamp(0, self.width as isize - 1) as usize;
+                    let sy = (yy as isize + dy).clamp(0, self.height as isize - 1) as usize;
+                    let p = self.get_pixel(sx, sy);
+                    sr += p.r as u32;
+                    sg += p.g as u32;
+                    sb += p.b as u32;
+                    n += 1;
+                }
+                let fr = (sr / n) as u8;
+                let fg = (sg / n) as u8;
+                let fb = (sb / n) as u8;
+                let a = tint.a as u16;
+                let inv = 255 - a;
+                self.put_pixel(
+                    xx,
+                    yy,
+                    Color::rgb(
+                        ((tint.r as u16 * a + fr as u16 * inv) / 255) as u8,
+                        ((tint.g as u16 * a + fg as u16 * inv) / 255) as u8,
+                        ((tint.b as u16 * a + fb as u16 * inv) / 255) as u8,
+                    ),
+                );
+            }
+        }
+    }
+
     pub fn draw_text(&mut self, mut x: usize, y: usize, text: &str, c: Color) {
         for ch in text.chars() {
             let width = get_raster_width(FontWeight::Regular, RasterHeight::Size16);

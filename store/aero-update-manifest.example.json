@@ -1,0 +1,11 @@
+{
+  "format": 1,
+  "from_version": "0.1.0",
+  "to_version": "0.2.0",
+  "notes": "Example Foundation OTA manifest — publish beside a GitHub Release named v0.2.0",
+  "artifacts": [
+    "AeroOS-Foundation-0.2.0.img",
+    "AeroOS-Foundation-0.2.0.iso"
+  ],
+  "restart_required": true
+}

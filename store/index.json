@@ -1,0 +1,52 @@
+{
+  "store_version": 2,
+  "name": "Aero App Store",
+  "platform": "foundation",
+  "updated": "2026-07-17",
+  "apps": [
+    {
+      "id": "dev.aero.hello",
+      "name": "Hello Aero",
+      "aliases": ["hello", "hello-aero"],
+      "version": "1.0.0",
+      "description": "Example Aero OS app bundle",
+      "category": "Utilities",
+      "kind": "foundation-demo",
+      "file": "store/apps/hello.aero",
+      "builtin": true
+    },
+    {
+      "id": "dev.aero.about",
+      "name": "About Aero",
+      "aliases": ["about"],
+      "version": "0.2.0",
+      "description": "System about panel",
+      "category": "System",
+      "kind": "foundation-builtin",
+      "file": "store/apps/about.aero",
+      "builtin": true
+    },
+    {
+      "id": "dev.aero.control",
+      "name": "Control Center",
+      "aliases": ["control", "settings"],
+      "version": "0.2.0",
+      "description": "Quick look and desktop controls",
+      "category": "System",
+      "kind": "foundation-builtin",
+      "file": "store/apps/control-center.aero",
+      "builtin": true
+    },
+    {
+      "id": "dev.aero.setup",
+      "name": "Setup",
+      "aliases": ["setup", "firstboot"],
+      "version": "0.2.0",
+      "description": "Run Aero Setup again",
+      "category": "System",
+      "kind": "foundation-builtin",
+      "file": "store/apps/setup.aero",
+      "builtin": true
+    }
+  ]
+}

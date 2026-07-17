@@ -9,6 +9,7 @@ mod fb;
 mod input;
 mod session;
 mod setup;
+mod store;
 mod ui;
 
 use uefi::boot;

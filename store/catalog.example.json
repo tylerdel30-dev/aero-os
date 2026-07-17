@@ -1,0 +1,12 @@
+{
+  "store_version": 2,
+  "apps": [
+    {
+      "id": "dev.aero.hello",
+      "name": "Hello Aero",
+      "aliases": ["hello"],
+      "version": "1.0.0",
+      "download": "https://github.com/tylerdel30-dev/aero-os/raw/main/store/apps/hello.aero"
+    }
+  ]
+}

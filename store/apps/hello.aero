@@ -1,0 +1,10 @@
+{
+  "format": 1,
+  "id": "dev.aero.hello",
+  "name": "Hello Aero",
+  "version": "1.0.0",
+  "kind": "foundation-demo",
+  "entry": "hello",
+  "source": "examples/hello-aero/hello.aero",
+  "description": "Example .aero app bundle"
+}

@@ -1,0 +1,9 @@
+{
+  "format": 1,
+  "id": "dev.aero.control",
+  "name": "Control Center",
+  "version": "0.2.0",
+  "kind": "foundation-builtin",
+  "entry": "control",
+  "description": "Quick look and desktop controls"
+}

@@ -1,0 +1,9 @@
+{
+  "format": 1,
+  "id": "dev.aero.setup",
+  "name": "Setup",
+  "version": "0.2.0",
+  "kind": "foundation-builtin",
+  "entry": "setup",
+  "description": "Run Aero first-boot Setup again"
+}

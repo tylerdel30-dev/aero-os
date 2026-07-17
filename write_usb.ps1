@@ -29,11 +29,13 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 
 if (-not $IsoPath) {
     $cand = @(
+        (Join-Path $PSScriptRoot "out\AeroOS-Foundation-0.2.0.iso"),
+        (Join-Path $PSScriptRoot "out\AeroOS-Foundation-0.2.0.img"),
         (Join-Path $PSScriptRoot "out\AeroOS-Foundation-0.1.0.iso"),
         (Join-Path $PSScriptRoot "out\AeroOS-Foundation-0.1.0.img")
     ) | Where-Object { Test-Path $_ } | Select-Object -First 1
     if ($cand) { $IsoPath = $cand }
-    else { $IsoPath = Join-Path $PSScriptRoot "out\AeroOS-Foundation-0.1.0.iso" }
+    else { $IsoPath = Join-Path $PSScriptRoot "out\AeroOS-Foundation-0.2.0.iso" }
 }
 if (-not (Test-Path $IsoPath)) {
     Write-Host "ERROR: Image not found: $IsoPath" -ForegroundColor Red

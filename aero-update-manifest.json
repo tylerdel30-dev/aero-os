@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "from_version": "0.1.0",
+  "to_version": "0.2.0",
+  "notes": "Foundation 0.2 — frosted glass desktop, mouse, Start menu Store, .aero catalog",
+  "artifacts": [
+    "AeroOS-Foundation-0.2.0.img",
+    "AeroOS-Foundation-0.2.0.iso"
+  ],
+  "preserve": [
+    "user session name",
+    "region",
+    "look preference"
+  ],
+  "restart_required": true
+}
